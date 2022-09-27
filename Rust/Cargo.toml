@@ -1,0 +1,19 @@
+[package]
+name = "rocket_controller"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rppal = "0.13.1"
+bmp085 = "0.1.1"
+i2cdev = "0.3.2"
+
+[dependencies.rocket]
+rocket = "0.5.0-rc.1"
+features = ["json"]
+
+[dependencies.serde]
+version = "1.0.136"
+features = ["derive"]
