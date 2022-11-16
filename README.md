@@ -35,3 +35,5 @@ download the latest [release](https://github.com/explosion33/RocketController/re
 edit `rocket.toml` to change api server settings and `flight.ini` to adjust in-flight calculation settings
 
 run with `./path/to/rocket_controller`
+
+'test'
