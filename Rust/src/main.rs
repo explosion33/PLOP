@@ -9,6 +9,9 @@ mod indicator;
 
 fn main() {
     // INIT SENSORS
+    // INIT LED
+
+    // CHECK IGNITER CONTINUITY
 
 
     // GET SENSOR DATA
