@@ -27,7 +27,10 @@ impl Baro {
         let i2c_dev = LinuxI2CDevice::new("/dev/i2c-1", BMP085_I2C_ADDR).expect("unable to access i2c device");
         let sensor = match BMP085BarometerThermometer::new(i2c_dev, SamplingMode::Standard) {
             Ok(n) => n,
-            Err(_) => {return None;},
+            Err(n) => {
+                println!("{:?}", n);
+                return None;
+            },
         };
     
         let (base_alt, base_pres): (f32, f32) = match Baro::read_config(String::from(config_path)) {
@@ -60,14 +63,14 @@ impl Baro {
         };
     }
 
-    pub fn get_temp(&self) -> Option<f32> {
+    pub fn get_temp(&mut self) -> Option<f32> {
         match self.sensor.temperature_celsius() {
             Ok(n) => Some(n),
             Err(_) => None,
         }
     }
 
-    pub fn get_pressure(&self) -> Option<f32> {
+    pub fn get_pressure(&mut self) -> Option<f32> {
         match self.sensor.pressure_kpa() {
             Ok(n) => Some(n),
             Err(_) => None,
@@ -191,7 +194,7 @@ impl Baro {
     // calculates the alitude based on the
     // current pressure and temperature
     // and the base pressure
-    pub fn get_alt(&self) -> Option<f32> {
+    pub fn get_alt(&mut self) -> Option<f32> {
         let p = match self.get_pressure() {
             Some(n) => n,
             None => {return None;}
@@ -207,21 +210,23 @@ impl Baro {
         const RATIO2: f32 = 0.0065;
 
         let res: f32 = self.base_alt + ((((self.base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
-        Ok(res)
+        Some(res)
     }
 
 
-    pub fn get_alt_variance(&self, iter: usize, timeout: Option<Duration>) -> Result<(f32, f32), (f32, f32, usize)> {
+    pub fn get_alt_variance(&mut self, iter: usize, timeout: Option<Duration>) -> Result<(f32, f32), (f32, f32, usize)> {        
         if iter < 2 {
-            return Err((0, 0, 0));
+            return Err((0f32, 0f32, 0usize));
         }
 
         let mut values: Vec<f32> = Vec::with_capacity(iter);
-        let mut mean: f32 = 0;
+        let mut mean: f32 = 0f32;
 
         let start = Instant::now();
+
+        let mut curr = iter;
         loop {
-            if iter == 0 {
+            if curr == 0 {
                 break;
             }
 
@@ -231,21 +236,21 @@ impl Baro {
 
             match self.get_alt() {
                 Some(n) => {
-                    values.push(value);
-                    mean += value;
-                    iter -= 1;
+                    values.push(n);
+                    mean += n;
+                    curr -= 1;
                 },
                 None => {},
             }
         }
 
-        mean /= iter;
+        mean /= iter as f32;
 
-        let mut stdev: f32 = 0;
+        let mut stdev: f32 = 0f32;
         for val in values {
             stdev += (val-mean).powi(2);
         }
-        stdev /= iter;
+        stdev /= iter as f32;
 
         stdev = stdev.sqrt();
 
