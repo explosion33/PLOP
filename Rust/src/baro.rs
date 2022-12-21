@@ -22,6 +22,8 @@ pub struct Baro {
     pub base_pres: f32,
 }
 
+// TODO make baro code asyncronous
+
 impl Baro {
     pub fn new(config_path: &str) -> Option<Baro> {
         let i2c_dev = LinuxI2CDevice::new("/dev/i2c-1", BMP085_I2C_ADDR).expect("unable to access i2c device");

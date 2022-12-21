@@ -17,11 +17,12 @@ fn main() {
 
     let mut imu = IMU::new("imu.conf");
     let mut baro = Baro::new("bar.conf").unwrap();
-    let mut gps = GPS::new();
+    //baro.configure(191f32);
+    //let mut gps = GPS::new();
     //imu.calibrate();
 
     loop {
-        match gps.get_data() {
+        /*match gps.get_data() {
             Some(data) => {
                 println!("\n{:?}", data)
             },
@@ -30,9 +31,9 @@ fn main() {
                 //stdout().flush();
                 //thread::sleep(Duration::from_millis(50));
             },
-        }
+        }*/
 
-        let (a,b,c) = match imu.euler() {
+        let (mut a,b,c) = match imu.euler() {
             Some(n) => n,
             _ => {
                 println!("lost value");
@@ -40,9 +41,11 @@ fn main() {
             },
         };
 
+        a += 180f32;
+
         let (t0, t1, t2, t3) = match imu.quaternion() {
-            Some(n) => {
-                (n.s, n.v.x, n.v.y, n.v.z)
+            Some((s, v)) => {
+                (s, v[0], v[1], v[2])
             },
             _ => {
                 println!("lost value");
@@ -57,12 +60,12 @@ fn main() {
             _ => {},
         }
         
-        match baro.get_alt_variance(10, None) {
+        /*match baro.get_alt_variance(10, None) {
             Ok((alt, var)) => {
                 println!("baro: {alt}, {var}");
             },
             Err(_) => todo!(),
-        }
+        }*/
     }
     
 

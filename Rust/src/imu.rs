@@ -1,10 +1,14 @@
 extern crate bno055;
 extern crate i2cdev;
+extern crate quaternion_core;
 
 use linux_embedded_hal::{Delay, I2cdev};
 use bno055::{BNO055OperationMode, BNO055Calibration, BNO055_CALIB_SIZE, Bno055};
 use std::io::prelude::*;
-use bno055::mint::{Quaternion, Vector3};
+//use bno055::mint::{Quaternion};
+
+
+use quaternion_core::{Vector3, Quaternion, conj, frame_rotation, point_rotation, from_euler_angles, to_euler_angles, RotationType, RotationSequence};
 
 use std::time::Instant;
 
@@ -25,106 +29,8 @@ impl Vec3 {
     fn unpack(&self) -> (f32, f32, f32) {
         return (self.x, self.y, self.z);
     }
-    
-    fn dot(vec1: &Vec3, vec2: &Vec3) -> f32 {
-        (vec1.x * vec2.x) + (vec1.y * vec2.y) + (vec1.z * vec1.z)
-    }
-
-    fn cross(vec1: &Vec3,  vec2: &Vec3) -> Vec3 {
-        Vec3 {
-            x: (vec2.x * vec1.z) - (vec2.x * vec1.y),
-            y: (vec2.y * vec2.x) - (vec2.y * vec2.z),
-            z: (vec2.z * vec2.x) - (vec2.z * vec2.x),
-        }
-    }
 }
 
-
-impl std::ops::Mul<Vec3> for f32 {
-    type Output = Vec3;
-
-    fn mul(self, rhs: Vec3) -> Vec3 {
-        Vec3 {
-            x: rhs.x * self,
-            y: rhs.y * self,
-            z: rhs.z * self,
-        }
-    }
-}
-
-impl std::ops::Add<Vec3> for Vec3 {
-    type Output = Vec3;
-
-    fn add(self, rhs: Vec3) -> Vec3 {
-        Vec3 {
-            x: rhs.x * self.x,
-            y: rhs.y * self.y,
-            z: rhs.z * self.z,
-        }
-    }
-}
-
-#[derive(Clone)]
-struct MathQuat {
-    t0: f32,
-    t1: f32,
-    t2: f32,
-    t3: f32,
-}
-
-impl MathQuat {
-    fn from(quat: &Quaternion<f32>) -> MathQuat {
-        MathQuat {
-            t0: quat.s,
-            t1: quat.v.x,
-            t2: quat.v.y,
-            t3: quat.v.z,
-        }
-    }
-
-    fn to(&self) -> Quaternion<f32> {
-        Quaternion {
-            s: self.t0,
-            v: Vector3 {
-                x: self.t1,
-                y: self.t2,
-                z: self.t3,
-            }
-        }
-    }
-
-    fn inverse(&mut self) {
-        self.t1 *= -1f32;
-        self.t2 *= -1f32;
-        self.t3 *= -1f32;
-    }
-
-
-}
-
-impl std::ops::Mul<MathQuat> for MathQuat {
-    type Output = MathQuat;
-
-    fn mul(self, rhs: MathQuat) -> MathQuat {
-        let r0 = self.t0;
-        let r1 = self.t1;
-        let r2 = self.t2;
-        let r3 = self.t3;
-
-        let s0 = rhs.t0;
-        let s1 = rhs.t1;
-        let s2 = rhs.t2;
-        let s3 = rhs.t3;
-
-
-        let t0: f32 = (r0*s0) - (r1*s1) - (r2*s2) - (r3*s3);
-        let t1: f32 = (r0*s1) + (r1*s0) - (r2*s3) + (r3*s2);
-        let t2: f32 = (r0*s2) + (r1*s3) + (r2*s0) - (r3*s1);
-        let t3: f32 = (r0*s3) - (r1*s2) + (r2*s1) + (r3*s0);
-        
-        MathQuat {t0, t1, t2, t3}
-    }
-}
 
 pub struct IMU {
     sensor: Bno055<I2cdev>,
@@ -178,16 +84,42 @@ impl IMU {
 
     pub fn euler(&mut self) -> Option<(f32, f32, f32)> {
         // TODO calculate from quaternion as recommended by bosch (Ndof firmware issue)
-        match self.sensor.euler_angles() {
+        /*match self.sensor.euler_angles() {
             Ok(n) => {Some((n.a, n.b, n.c))},
             Err(_) => None,
+        }*/
+
+        match self.quaternion() {
+            Some(n) => {
+                let v = to_euler_angles(RotationType::Extrinsic, RotationSequence::XYZ, n);
+                const TODEG: f32 = 57.29577951308;
+                Some((v[0]*TODEG, v[1]*TODEG, v[2]*TODEG))
+            },
+            None => None
         }
     }
     
     pub fn quaternion(&mut self) -> Option<Quaternion<f32>> {
         match self.sensor.quaternion() {
-            Ok(n) => Some(n),
+            Ok(quat) => {
+                Some((quat.s, [quat.v.x, quat.v.y, quat.v.z])) //mint quaternion to math quaternion
+            },
             Err(_) => None,
+        }
+    }
+
+    // rotates coordinate system around point
+    // effectively does the opposite of rot
+    //https://danceswithcode.net/engineeringnotes/quaternions/quaternions.html
+    fn rotate(v: Vec3, rot: Quaternion<f32>) -> Vec3 {
+        //let quat = quaternion::conj(rot);
+        //not sure why but ZYX appears to be the correct way to rotate our vectors?
+        let res = frame_rotation(rot, [v.z, v.y, v.x]);
+
+        Vec3 {
+            x: res[2],
+            y: res[1],
+            z: res[0],
         }
     }
 
@@ -207,31 +139,8 @@ impl IMU {
             }
         };
 
+        //Some(accel.unpack())
         Some(IMU::rotate(accel, rot).unpack())
-    }
-
-    // rotates coordinate system around point
-    // effectively does the opposite of rot
-    //https://danceswithcode.net/engineeringnotes/quaternions/quaternions.html
-    fn rotate(v: Vec3, rot: Quaternion<f32>) -> Vec3 {
-        let vec_quat = MathQuat {
-            t0: 0f32,
-            t1: v.x,
-            t2: v.y,
-            t3: v.z,
-        };
-        
-        let quat  = MathQuat::from(&rot);
-        let mut quat2 = MathQuat::from(&rot);
-        quat2.inverse();
-
-        let vec_prime = (quat * vec_quat) * quat2;
-
-        Vec3 {
-            x: vec_prime.t1,
-            y: vec_prime.t2,
-            z: vec_prime.t3,
-        }
     }
 
     pub fn dr_tick(&mut self) -> (f32, f32, f32) {
@@ -265,7 +174,7 @@ impl IMU {
         self.vel.x = x;
         self.vel.y = y;
         self.vel.z = z;
-    }
+    }  
 
     pub fn dr_update_disp(&mut self, x: f32, y: f32, z: f32) {
         self.disp.x = x;
@@ -291,4 +200,28 @@ impl IMU {
         file.write_all(calib.as_bytes());
     }
 
+}
+
+#[test]
+fn test() {
+    // rotated vector (device is 90 deg)
+    let rot = Vec3 {
+        x: 0f32,
+        y: 0f32,
+        z: 1f32,
+    };
+
+    const TOPI: f32 = 0.01745f32;
+
+    let quat = from_euler_angles(RotationType::Extrinsic, RotationSequence::XYZ, [45f32 * TOPI, 45f32 * TOPI, 0f32 * TOPI]);
+
+    let v = to_euler_angles(RotationType::Extrinsic, RotationSequence::XYZ, quat);
+
+    println!("(yaw, pitch, roll)\n(a,g,b)\n({}, {}, {})\n{:?}", v[0]/TOPI, v[1]/TOPI, v[2]/TOPI, quat);
+
+    let (x,y,z) = IMU::rotate(rot, quat).unpack();
+
+    println!("{}, {}, {}", x, y, z);
+
+    assert!(false);
 }
