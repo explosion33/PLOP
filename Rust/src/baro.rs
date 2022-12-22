@@ -26,6 +26,7 @@ pub struct Baro {
     alt: Arc<Mutex<f32>>,
     var: Arc<Mutex<f32>>,
     is_updated: Arc<Mutex<bool>>,
+    is_async: bool,
 }
 
 // TODO make baro code asyncronous
@@ -72,6 +73,7 @@ impl Baro {
             alt: Arc::new(Mutex::new(0f32)),
             var: Arc::new(Mutex::new(0f32)),
             is_updated: Arc::new(Mutex::new(false)),
+            is_async: false,
 
         })
     }
@@ -88,6 +90,10 @@ impl Baro {
     }
 
     pub fn get_temp(&mut self) -> Option<f32> {
+        if self.is_async {
+            return None;
+        }
+
         let mut sensor = self.sensor.lock().unwrap();
         match sensor.temperature_celsius() {
             Ok(n) => Some(n),
@@ -96,6 +102,10 @@ impl Baro {
     }
 
     pub fn get_pressure(&mut self) -> Option<f32> {
+        if self.is_async {
+            return None;
+        }
+
         let mut sensor = self.sensor.lock().unwrap();
         match sensor.pressure_kpa() {
             Ok(n) => Some(n),
@@ -123,6 +133,7 @@ impl Baro {
                 Some(n) => {
                     num_pres += 1;
                     total_pres += n;
+                    println!("{n}");
                 },
                 None => {},
             };
@@ -223,6 +234,10 @@ impl Baro {
     // current pressure and temperature
     // and the base pressure
     pub fn get_alt(&mut self) -> Option<f32> {
+        if self.is_async {
+            return None;
+        }
+
         let p = match self.get_pressure() {
             Some(n) => n,
             None => {return None;}
@@ -243,7 +258,7 @@ impl Baro {
 
 
     pub fn get_alt_variance(&mut self, iter: usize, timeout: Option<Duration>) -> Result<(f32, f32), (f32, f32, usize)> {        
-        if iter < 2 {
+        if iter < 2 || self.is_async {
             return Err((0f32, 0f32, 0usize));
         }
 
@@ -287,6 +302,8 @@ impl Baro {
 
 
     pub fn start_async(&mut self, iter: usize) {
+        self.is_async = true;
+
         let sensor = Arc::clone(&self.sensor);
         let alt = Arc::clone(&self.alt);
         let var = Arc::clone(&self.var);
@@ -296,43 +313,54 @@ impl Baro {
         let base_pres = self.base_pres.clone();
         
         let handle = thread::spawn(move || {
-            loop {
-                let get_alt = |sensor: &mut MutexGuard<BMP085BarometerThermometer<LinuxI2CDevice>>| -> Option<f32> {
-                    let t: f32 = match sensor.temperature_celsius() {
-                        Ok(n) => n + 273.15,
-                        _ => {return None;},
-                    };
-
-                    let p: f32 = match sensor.pressure_kpa() {
-                        Ok(n) => n,
-                        _ => {return None;},
-                    };
-
-                    //C to Kelvin
-                    const RATIO: f32 = 0.19022256;
-                    const RATIO2: f32 = 0.0065;
-
-                    let res: f32 = base_alt + ((((base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
-                    Some(res)
+            let mut sensor = sensor.lock().unwrap();
+            
+            let mut get_alt = || -> Option<f32> {
+                let p = match sensor.pressure_kpa() {
+                    Ok(n) => n,
+                    Err(n) => {
+                        println!("{:?}", n);
+                        return None;
+                    }
                 };
+        
+                let t = match sensor.temperature_celsius() {
+                    Ok(n) => n + 273.15,
+                    Err(n) => {
+                        println!("{:?}", n);
+                        return None;
+                    }
+                };
+
+                //C to Kelvin
+                const RATIO: f32 = 0.19022256;
+                const RATIO2: f32 = 0.0065;
+
+                let res: f32 = base_alt + ((((base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
+
+                println!("\t{res}, {p}, {t}");
+                Some(res)
+            };
+
+            loop {
 
                 let mut values: Vec<f32> = Vec::with_capacity(iter);
                 let mut mean: f32 = 0f32;
 
                 let mut curr = iter;
 
-                let mut locked_sensor = sensor.lock().unwrap();
-
                 loop {
                     if curr == 0 {
                         break;
                     }
 
-                    match get_alt(&mut locked_sensor) {
+                    match get_alt() {
                         Some(n) => {
                             mean += n;
                             values.push(n);
                             curr -= 1;
+                            //thread::sleep(Duration::from_millis(20));
+
                         },
 
                         None => {},
@@ -340,8 +368,6 @@ impl Baro {
 
 
                 }
-
-                drop(locked_sensor);
 
                 mean /= iter as f32;
 

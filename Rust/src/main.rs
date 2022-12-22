@@ -13,82 +13,84 @@ mod gps;
 use std::io::Write;
 use std::io::stdout;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 //use crate::indicator::Indicator;
 //mod indicator;
 
+struct Filter {
+    pub alt: f32,
+    pub  var: f32,
+}
+
+impl Filter {
+    pub fn update(&mut self, mean: f32, var: f32) {
+        self.alt = (self.alt*var + mean*self.var)/(self.var + var);
+        self.var = 1f32/((1f32/self.var) + (1f32/var));
+    }
+
+    pub fn predict(&mut self, mean: f32, var: f32) {
+        self.alt += mean;
+        self.var += mean;
+    }
+}
+
 fn main() {
 
-    let mut imu = IMU::new("imu.conf");
-    let mut baro = Baro::new("bar.conf").unwrap();
+    /*
+        * TODO:
+        * test effectiveness of performing a rolling average over accel and baro
+        * better characterize noise of each sensor, perhaps build in weight system
+        * add GPS altitude measurement with filter.update
+        * update vel using the gps' velocity calculation (may require rotating the velocity by quaternion)
+        * add more in-depth calibration to ssimu
+        *   make sure device is fully calibrated (internal blackbox)
+        *   add external acceleration offsets based on average resting accelerations
+        * ensure IMU acceleration rotations are working properly (not sure how to do this)
+        * clean-up async code from barometer class (no longer using)
+        * look into running multiple i2c lines on raspberry pi to seperate sensors
+        */
+        
 
-    baro.start_async(20);
+    let mut imu = IMU::new("imu.conf");
+    let mut baro = Baro::new("baro.conf").unwrap();
 
     //baro.configure(191f32);
+    //baro.start_async(10);
+
     //let mut gps = GPS::new();
     //imu.calibrate();
 
+    let mut start = Instant::now();
+
+    let mut vel: f32 = 0f32;
+
+    let mut filter = Filter {
+        alt: 191f32,
+        var: 0f32,
+    };
+
     loop {
-        /*match gps.get_data() {
-            Some(data) => {
-                println!("\n{:?}", data)
-            },
-            _ => {
-                //print!(".");
-                //stdout().flush();
-                //thread::sleep(Duration::from_millis(50));
-            },
-        }*/
+        let dt = start.elapsed().as_secs_f32();
+        start = Instant::now();
 
-        /*let (mut a,b,c) = match imu.euler() {
-            Some(n) => n,
-            _ => {
-                println!("lost value");
-                (0f32,0f32,0f32)
-            },
-        };
-
-        a += 180f32;
-
-        let (t0, t1, t2, t3) = match imu.quaternion() {
-            Some((s, v)) => {
-                (s, v[0], v[1], v[2])
-            },
-            _ => {
-                println!("lost value");
-                (0f32, 0f32, 0f32, 0f32)
-            }
-        };
-        
         match imu.accel() {
-            Some((x,y,z)) => {
-                println!("{:8.0}, {:8.0}, {:8.0} | {:8.0}, {:8.0}, {:8.0} | {:8.4}, {:8.4}, {:8.4}, {:8.4}", x.abs(), y.abs(), z.abs(), a, b, c, t0, t1, t2, t3);
+            Some((_, _, z)) => {
+                filter.predict(vel*dt + 0.5*z*dt*dt, 1f32);
+                vel += z*dt;
             },
             _ => {},
-        }*/
-        
-        /*match baro.get_alt_variance(10, None) {
-            Ok((alt, var)) => {
-                println!("baro: {alt}, {var}");
-            },
-            Err(_) => todo!(),
-        }*/
+        }
 
-        match baro.get_alt_variance_async() {
-            Some((alt, var)) => {
-                println!("\nbaro: {alt}, {var}");
+        match baro.get_alt() {
+            Some(alt) => {
+                filter.update(alt, 0.5f32);
+                println!("{}", alt);
             },
             _ => {
-                print!(".");
-                stdout().flush();
-                thread::sleep(Duration::from_millis(20));
-
             },
         };
+
+        println!("alt: {:4.1}, var: {}, vel: {}, dt: {}", filter.alt, filter.var, vel, dt);
     }
-    
-
-
-    // FIRE IGNITER
 }
