@@ -7,27 +7,40 @@ use bmp085::*;
 use i2cdev::linux::*;
 use i2cdev::sensors::{Barometer, Thermometer};
 
-use std::thread;
 use std::time::{Duration, Instant};
 use std::fs::File;
 
 use std::io::{self, Read};
 use std::io::Write;
 
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
+
 
 pub struct Baro {
-    sensor: Box<BMP085BarometerThermometer<LinuxI2CDevice>>,
+    sensor: Arc<Mutex<BMP085BarometerThermometer<LinuxI2CDevice>>>,
     config_path: String,
     pub base_alt: f32,
     pub base_pres: f32,
+
+    alt: Arc<Mutex<f32>>,
+    var: Arc<Mutex<f32>>,
+    is_updated: Arc<Mutex<bool>>,
 }
 
 // TODO make baro code asyncronous
 
 impl Baro {
     pub fn new(config_path: &str) -> Option<Baro> {
-        let i2c_dev = LinuxI2CDevice::new("/dev/i2c-1", BMP085_I2C_ADDR).expect("unable to access i2c device");
-        let sensor = match BMP085BarometerThermometer::new(i2c_dev, SamplingMode::Standard) {
+        let i2c_dev = match LinuxI2CDevice::new("/dev/i2c-1", BMP085_I2C_ADDR) {
+            Ok(n) => n,
+            Err(n) => {
+                println!("{:?}", n);
+                return None;
+            },
+        };
+
+        let sensor = match BMP085BarometerThermometer::new(i2c_dev, SamplingMode::UltraHighRes) {
             Ok(n) => n,
             Err(n) => {
                 println!("{:?}", n);
@@ -51,7 +64,16 @@ impl Baro {
             },
         };
 
-        Some(Baro {sensor: Box::new(sensor), config_path: String::from(config_path), base_alt, base_pres})
+        Some(Baro {
+            sensor: Arc::new(Mutex::new(sensor)),
+            config_path: String::from(config_path),
+            base_alt,
+            base_pres,
+            alt: Arc::new(Mutex::new(0f32)),
+            var: Arc::new(Mutex::new(0f32)),
+            is_updated: Arc::new(Mutex::new(false)),
+
+        })
     }
 
     pub fn has_configuration(&self) -> bool {
@@ -66,14 +88,16 @@ impl Baro {
     }
 
     pub fn get_temp(&mut self) -> Option<f32> {
-        match self.sensor.temperature_celsius() {
+        let mut sensor = self.sensor.lock().unwrap();
+        match sensor.temperature_celsius() {
             Ok(n) => Some(n),
             Err(_) => None,
         }
     }
 
     pub fn get_pressure(&mut self) -> Option<f32> {
-        match self.sensor.pressure_kpa() {
+        let mut sensor = self.sensor.lock().unwrap();
+        match sensor.pressure_kpa() {
             Ok(n) => Some(n),
             Err(_) => None,
         }
@@ -91,6 +115,7 @@ impl Baro {
             },
         };
 
+        // calculate average pressure
         let mut total_pres: f32 = 0f32;
         let mut num_pres:usize = 0;
         while num_pres < 50 {
@@ -107,6 +132,7 @@ impl Baro {
         let avg_pres = total_pres / num_pres as i32 as f32;
         println!("{}, {}, {}", avg_pres, total_pres, num_pres);
 
+        // write data to config
         match file.write_all(format!("{}\n{}", alt, avg_pres).as_bytes()) {
             Ok(_) => {},
             Err(_) => {
@@ -258,5 +284,98 @@ impl Baro {
 
         Ok((mean, stdev))
     }
+
+
+    pub fn start_async(&mut self, iter: usize) {
+        let sensor = Arc::clone(&self.sensor);
+        let alt = Arc::clone(&self.alt);
+        let var = Arc::clone(&self.var);
+        let is_updated = Arc::clone(&self.is_updated);
+
+        let base_alt = self.base_alt.clone();
+        let base_pres = self.base_pres.clone();
+        
+        let handle = thread::spawn(move || {
+            loop {
+                let get_alt = |sensor: &mut MutexGuard<BMP085BarometerThermometer<LinuxI2CDevice>>| -> Option<f32> {
+                    let t: f32 = match sensor.temperature_celsius() {
+                        Ok(n) => n + 273.15,
+                        _ => {return None;},
+                    };
+
+                    let p: f32 = match sensor.pressure_kpa() {
+                        Ok(n) => n,
+                        _ => {return None;},
+                    };
+
+                    //C to Kelvin
+                    const RATIO: f32 = 0.19022256;
+                    const RATIO2: f32 = 0.0065;
+
+                    let res: f32 = base_alt + ((((base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
+                    Some(res)
+                };
+
+                let mut values: Vec<f32> = Vec::with_capacity(iter);
+                let mut mean: f32 = 0f32;
+
+                let mut curr = iter;
+
+                let mut locked_sensor = sensor.lock().unwrap();
+
+                loop {
+                    if curr == 0 {
+                        break;
+                    }
+
+                    match get_alt(&mut locked_sensor) {
+                        Some(n) => {
+                            mean += n;
+                            values.push(n);
+                            curr -= 1;
+                        },
+
+                        None => {},
+                    };
+
+
+                }
+
+                drop(locked_sensor);
+
+                mean /= iter as f32;
+
+                let mut stdev: f32 = 0f32;
+                for val in values {
+                    stdev += (val-mean).powi(2);
+                }
+
+                stdev /= iter as f32;
+
+                stdev = stdev.sqrt();
+
+                {
+                    *alt.lock().unwrap() = mean;
+                    *var.lock().unwrap() = stdev;
+                    *is_updated.lock().unwrap() = true;
+                }
+            }
+        });
+    }
+
+
+    pub fn get_alt_variance_async(&mut self) -> Option<(f32, f32)> {
+        let mut updated = self.is_updated.lock().unwrap();
+        if *updated {
+            *updated = false;
+
+            let alt = self.alt.lock().unwrap().clone();
+            let var = self.var.lock().unwrap().clone();
+
+            return Some((alt, var));
+        }
+        
+        None
+    } 
 
 }
