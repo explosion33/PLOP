@@ -10,7 +10,8 @@ use std::io::prelude::*;
 
 use quaternion_core::{Vector3, Quaternion, conj, frame_rotation, point_rotation, from_euler_angles, to_euler_angles, RotationType, RotationSequence};
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use std::thread;
 
 use std::fs::OpenOptions;
 
@@ -35,9 +36,8 @@ impl Vec3 {
 pub struct IMU {
     sensor: Bno055<I2cdev>,
     path: String,
-    vel: Vec3,
-    disp: Vec3,
-    dr_last: Option<Instant>,
+
+    errors: Vec3,
 }
 
 impl IMU {
@@ -58,9 +58,7 @@ impl IMU {
                 return IMU {
                     sensor,
                     path: path.to_string(),
-                    vel: Vec3::new(),
-                    disp: Vec3::new(),
-                    dr_last: None,
+                    errors: Vec3::new(),
                 };
             }
         };
@@ -76,9 +74,7 @@ impl IMU {
         IMU {
             sensor,
             path: path.to_string(),
-            vel: Vec3::new(),
-            disp: Vec3::new(),
-            dr_last: None,
+            errors: Vec3::new(),
         }
     }
 
@@ -127,7 +123,11 @@ impl IMU {
         //TODO: rotate based on current orientation
         let accel = match self.sensor.linear_acceleration() {
             Ok(n) => {
-                Vec3 {x: n.x, y: n.y, z: n.z}
+                Vec3 {
+                    x: n.x - self.errors.x,
+                    y: n.y - self.errors.y,
+                    z: n.z - self.errors.z,
+                }
             }
             Err(_) => {return None;},
         };
@@ -143,43 +143,34 @@ impl IMU {
         Some(IMU::rotate(accel, rot).unpack())
     }
 
-    pub fn dr_tick(&mut self) -> (f32, f32, f32) {
-        if self.dr_last == None {
-            self.dr_last = Some(Instant::now());
-            return self.disp.unpack();
+    pub fn calibrate_static_erorr(&mut self) {
+        let mut x = 0f32;
+        let mut y = 0f32;
+        let mut z = 0f32;
+
+        let mut iter: usize = 100;
+
+        while iter > 0 {
+            match self.sensor.linear_acceleration() {
+                Ok(n) => {
+                    println!("{:?}", n);
+                    x += n.x;
+                    y += n.y;
+                    z += n.z;
+                    iter -= 1;
+                    thread::sleep(Duration::from_millis(20));
+                }
+                Err(_) => {},
+            };
         }
 
-        let dt: f32 = self.dr_last.unwrap().elapsed().as_micros() as f32 / 1000000f32;
-        println!("{}", dt);
-
-        self.disp.x += self.vel.x * dt;
-        self.disp.y += self.vel.y * dt;
-        self.disp.z += self.vel.z * dt;
-
-        match self.accel() {
-            Some((x,y,z)) => {
-                self.vel.x += x * dt;
-                self.vel.y += y * dt;
-                self.vel.z += z * dt;
-            },
-            None => {},
+        self.errors = Vec3 {
+            x: x/100f32,
+            y: y/100f32,
+            z: z/100f32,
         };
 
-        self.dr_last = Some(Instant::now());
-
-        self.disp.unpack()
-    }
-
-    pub fn dr_update_vel(&mut self, x: f32, y: f32, z: f32) {
-        self.vel.x = x;
-        self.vel.y = y;
-        self.vel.z = z;
-    }  
-
-    pub fn dr_update_disp(&mut self, x: f32, y: f32, z: f32) {
-        self.disp.x = x;
-        self.disp.y = y;
-        self.disp.z = z;
+        println!("x: {}, y: {}, z: {}", self.errors.x, self.errors.y, self.errors.z);
     }
 
     pub fn calibrate(&mut self) {
@@ -192,7 +183,7 @@ impl IMU {
 
 
         while !self.sensor.is_fully_calibrated().unwrap() {
-            print!("{:#?}", self.sensor.get_calibration_status().unwrap());
+            print!("{:#?}", self.sensor.get_calibration_status());
         }
 
         let calib = self.sensor.calibration_profile(&mut Delay {}).unwrap();
