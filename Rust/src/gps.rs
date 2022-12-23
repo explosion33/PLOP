@@ -68,16 +68,11 @@ impl Data {
             None => None,
         };
 
-        let speed = match self.heading {
-            Some(_) => {
-                match self.speed {
-                    Some(n) => {
-                        let err = 0.1 * self.hdop.unwrap_or(60f32); // err from spec times dilution
-                        Some((n, err))
-                    }
-                    None => None,
-                }
-            },
+        let speed = match self.speed {
+            Some(n) => {
+                let err = 0.1 * self.hdop.unwrap_or(60f32); // err from spec times dilution
+                Some((n, err))
+            }
             None => None,
         };
 
@@ -118,11 +113,11 @@ pub struct GPS {
 
 impl GPS {
     pub fn new() -> GPS {
-        println!("setting baud rate");
-        let r = set_baud_rate("57600", "/dev/serial0");
-        println!("{:?}", r);
+        //println!("setting baud rate");
+        //let r = set_baud_rate("57600", "/dev/serial0");
+        //println!("{:?}", r);
 
-        let mut gps = Gps::new("/dev/serial0", "57600");
+        let mut gps = Gps::new("/dev/serial0", "9600");
 
         gps.pmtk_314_api_set_nmea_output(NmeaOutput{gga: 1, gsa: 1, gsv: 0,  gll: 0, rmc: 0, vtg: 1, pmtkchn_interval: 1 });
         let r = gps.pmtk_220_set_nmea_updaterate("100");
@@ -141,6 +136,7 @@ impl GPS {
 
             loop {
                 let values = gps.update();
+                //println!("{:?}", values);
         
                 // Depending on what values you are interested in you can adjust what sentences you
                 // wish to get and ignore all other sentences.
@@ -164,7 +160,6 @@ impl GPS {
                     },
                     GpsSentence::VTG(s) => {
                         let mut data = latest_data_clone.lock().unwrap();
-                        
                         data.heading = s.magnetic_course;
                         data.speed = match s.speed_kph {
                             Some(n) => {
@@ -201,6 +196,7 @@ impl GPS {
     pub fn get_data(&mut self) -> Option<GpsData> {
         let mut data = self.latest_data.lock().unwrap();
         
+        //println!("{:?}", data);
         if !data.ready() {
             return None;
         }
