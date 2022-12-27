@@ -18,15 +18,11 @@ use std::thread;
 
 
 pub struct Baro {
-    sensor: Arc<Mutex<BMP085BarometerThermometer<LinuxI2CDevice>>>,
+    sensor: BMP085BarometerThermometer<LinuxI2CDevice>,
     config_path: String,
     pub base_alt: f32,
     pub base_pres: f32,
 
-    alt: Arc<Mutex<f32>>,
-    var: Arc<Mutex<f32>>,
-    is_updated: Arc<Mutex<bool>>,
-    is_async: bool,
 }
 
 // TODO make baro code asyncronous
@@ -66,15 +62,10 @@ impl Baro {
         };
 
         Some(Baro {
-            sensor: Arc::new(Mutex::new(sensor)),
+            sensor,
             config_path: String::from(config_path),
             base_alt,
             base_pres,
-            alt: Arc::new(Mutex::new(0f32)),
-            var: Arc::new(Mutex::new(0f32)),
-            is_updated: Arc::new(Mutex::new(false)),
-            is_async: false,
-
         })
     }
 
@@ -90,24 +81,14 @@ impl Baro {
     }
 
     pub fn get_temp(&mut self) -> Option<f32> {
-        if self.is_async {
-            return None;
-        }
-
-        let mut sensor = self.sensor.lock().unwrap();
-        match sensor.temperature_celsius() {
+        match self.sensor.temperature_celsius() {
             Ok(n) => Some(n),
             Err(_) => None,
         }
     }
 
     pub fn get_pressure(&mut self) -> Option<f32> {
-        if self.is_async {
-            return None;
-        }
-
-        let mut sensor = self.sensor.lock().unwrap();
-        match sensor.pressure_kpa() {
+        match self.sensor.pressure_kpa() {
             Ok(n) => Some(n),
             Err(_) => None,
         }
@@ -116,7 +97,7 @@ impl Baro {
     // configures base altitude for a given known altitude
     // takes t >= 5 seconds
     // returns true if the config was successfull false otherwise
-    pub fn configure(&mut self, alt: f32) -> bool {
+    pub fn configure(&mut self, alt: f32, iter: usize) -> bool {
         let mut file = match File::create(self.config_path.to_string()) {
             Ok(n) => n,
             Err(_) => {
@@ -128,7 +109,7 @@ impl Baro {
         // calculate average pressure
         let mut total_pres: f32 = 0f32;
         let mut num_pres:usize = 0;
-        while num_pres < 50 {
+        while num_pres < iter {
             match self.get_pressure() {
                 Some(n) => {
                     num_pres += 1;
@@ -137,10 +118,10 @@ impl Baro {
                 },
                 None => {},
             };
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
         };
     
-        let avg_pres = total_pres / num_pres as i32 as f32;
+        let avg_pres = total_pres / num_pres as f32;
         println!("{}, {}, {}", avg_pres, total_pres, num_pres);
 
         // write data to config
@@ -234,10 +215,6 @@ impl Baro {
     // current pressure and temperature
     // and the base pressure
     pub fn get_alt(&mut self) -> Option<f32> {
-        if self.is_async {
-            return None;
-        }
-
         let p = match self.get_pressure() {
             Some(n) => n,
             None => {return None;}
@@ -255,153 +232,5 @@ impl Baro {
         let res: f32 = self.base_alt + ((((self.base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
         Some(res)
     }
-
-
-    pub fn get_alt_variance(&mut self, iter: usize, timeout: Option<Duration>) -> Result<(f32, f32), (f32, f32, usize)> {        
-        if iter < 2 || self.is_async {
-            return Err((0f32, 0f32, 0usize));
-        }
-
-        let mut values: Vec<f32> = Vec::with_capacity(iter);
-        let mut mean: f32 = 0f32;
-
-        let start = Instant::now();
-
-        let mut curr = iter;
-        loop {
-            if curr == 0 {
-                break;
-            }
-
-            if timeout.is_some() && start.elapsed() > timeout.unwrap() {
-                break;
-            }
-
-            match self.get_alt() {
-                Some(n) => {
-                    values.push(n);
-                    mean += n;
-                    curr -= 1;
-                },
-                None => {},
-            }
-        }
-
-        mean /= iter as f32;
-
-        let mut stdev: f32 = 0f32;
-        for val in values {
-            stdev += (val-mean).powi(2);
-        }
-        stdev /= iter as f32;
-
-        stdev = stdev.sqrt();
-
-        Ok((mean, stdev))
-    }
-
-
-    pub fn start_async(&mut self, iter: usize) {
-        self.is_async = true;
-
-        let sensor = Arc::clone(&self.sensor);
-        let alt = Arc::clone(&self.alt);
-        let var = Arc::clone(&self.var);
-        let is_updated = Arc::clone(&self.is_updated);
-
-        let base_alt = self.base_alt.clone();
-        let base_pres = self.base_pres.clone();
-        
-        let handle = thread::spawn(move || {
-            let mut sensor = sensor.lock().unwrap();
-            
-            let mut get_alt = || -> Option<f32> {
-                let p = match sensor.pressure_kpa() {
-                    Ok(n) => n,
-                    Err(n) => {
-                        println!("{:?}", n);
-                        return None;
-                    }
-                };
-        
-                let t = match sensor.temperature_celsius() {
-                    Ok(n) => n + 273.15,
-                    Err(n) => {
-                        println!("{:?}", n);
-                        return None;
-                    }
-                };
-
-                //C to Kelvin
-                const RATIO: f32 = 0.19022256;
-                const RATIO2: f32 = 0.0065;
-
-                let res: f32 = base_alt + ((((base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
-
-                println!("\t{res}, {p}, {t}");
-                Some(res)
-            };
-
-            loop {
-
-                let mut values: Vec<f32> = Vec::with_capacity(iter);
-                let mut mean: f32 = 0f32;
-
-                let mut curr = iter;
-
-                loop {
-                    if curr == 0 {
-                        break;
-                    }
-
-                    match get_alt() {
-                        Some(n) => {
-                            mean += n;
-                            values.push(n);
-                            curr -= 1;
-                            //thread::sleep(Duration::from_millis(20));
-
-                        },
-
-                        None => {},
-                    };
-
-
-                }
-
-                mean /= iter as f32;
-
-                let mut stdev: f32 = 0f32;
-                for val in values {
-                    stdev += (val-mean).powi(2);
-                }
-
-                stdev /= iter as f32;
-
-                stdev = stdev.sqrt();
-
-                {
-                    *alt.lock().unwrap() = mean;
-                    *var.lock().unwrap() = stdev;
-                    *is_updated.lock().unwrap() = true;
-                }
-            }
-        });
-    }
-
-
-    pub fn get_alt_variance_async(&mut self) -> Option<(f32, f32)> {
-        let mut updated = self.is_updated.lock().unwrap();
-        if *updated {
-            *updated = false;
-
-            let alt = self.alt.lock().unwrap().clone();
-            let var = self.var.lock().unwrap().clone();
-
-            return Some((alt, var));
-        }
-        
-        None
-    } 
 
 }
