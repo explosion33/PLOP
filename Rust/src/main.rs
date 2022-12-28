@@ -29,19 +29,19 @@ use std::time::{Duration, Instant};
 //mod indicator;
 
 struct Filter {
-    pub alt: f32,
-    pub  var: f32,
+    pub val: f32,
+    pub var: f32,
 }
 
 impl Filter {
     pub fn update(&mut self, mean: f32, var: f32) {
-        self.alt = (self.alt*var + mean*self.var)/(self.var + var);
+        self.val = (self.val*var + mean*self.var)/(self.var + var);
         self.var = 1f32/((1f32/self.var) + (1f32/var));
     }
 
     pub fn predict(&mut self, mean: f32, var: f32) {
-        self.alt += mean;
-        self.var += mean;
+        self.val += mean;
+        self.var += var;
     }
 }
 
@@ -54,10 +54,7 @@ fn main() {
         * extract Z component of GPS velocity (see TODO below)
         * ensure IMU acceleration rotations are working properly (not sure how to do this)
         * look into running multiple i2c lines on raspberry pi to seperate sensors
-        * look into creating a seperate Kalman Filter to manage velocity
-        *   update velocity based on predicted acceleromter
-        *   calculated GPS
-        *   and barometer estimated velocity
+        * add more measurements / predictions to velocity filter from baromter
         */
         
 
@@ -143,12 +140,17 @@ fn main() {
     let mut start = Instant::now();
 
     // tracked values
-    let mut vel: f32 = 0f32;
+    //let mut vel: f32 = 0f32;
+
+    let mut vel_filter = Filter {
+        val: 0f32,
+        var: 1000f32,
+    };
 
     let mut pos_filter = Filter {
-        alt: 191f32,
-        var: 0f32,
-    }; // Kalman altitude
+        val: 0f32,
+        var: 1000f32,
+    }; // Kalman valitude
 
     // rolling averages
     let mut accels: [f32; ACCEL_ROLLING_AVERAGE] = [0f32; ACCEL_ROLLING_AVERAGE];
@@ -173,17 +175,15 @@ fn main() {
         // update accel rolling average
         match imu.accel() {
             Some((_, _, mut z)) => {
-                //pos_filter.predict(vel*dt + 0.5*z*dt*dt, 1f32);
-                //vel += z*dt;
                 for i in 1..10 {
                     accels[i] = accels[i-1];
                 }
 
                 // TODO tweak values perhaps make these come from stdev?
                 // filter out values that are likely noise
-                if z < 0.05f32 && z > -0.05f32 {
-                    z = 0f32;
-                }
+                //if z < 0.05f32 && z > -0.05f32 {
+                //    z = 0f32;
+                //}
 
                 accels[0] = z;
             },
@@ -232,8 +232,8 @@ fn main() {
 
         // TODO track and combine velocity error
         // dx = V_i * t + 1/2at^2
-        pos_filter.predict(vel*dt + 0.5*acc*(dt*dt), ACCEL_NOISE * ACCEL_WEIGHT);
-        vel += acc*dt*10f32;
+        pos_filter.predict(vel_filter.val*dt + 0.5*acc*(dt*dt), (ACCEL_NOISE * ACCEL_WEIGHT) + vel_filter.var);
+        vel_filter.predict(acc*dt, ACCEL_NOISE*ACCEL_WEIGHT);
 
         // update from baro
         pos_filter.update(baro_alt, BARO_NOISE * BARO_WEIGHT);
@@ -251,13 +251,13 @@ fn main() {
 
                 // update tracked speed
                 match data.speed {
-                    Some((speed, _)) => {
+                    Some((speed, var)) => {
                         println!("gps_vel: {}", speed);
                         // TODO: use orientation to get Z componenet of velocity?
                         // may not be possible without the heading componenent?
                         // alternitively estimate velocity in all directions using accelerometer
                         // use these 3 to compute overall heading
-                        vel = speed;
+                        vel_filter.update(speed, var);
                     },
                     _ => {},
                 }
@@ -267,7 +267,7 @@ fn main() {
 
         println!("baro: {}", baro_alt);
         println!("acc: {}", acc);
-        println!("alt: {:4.1}, var: {}, vel: {}, dt: {}", pos_filter.alt, pos_filter.var, vel, dt);
+        println!("alt: {:4.1}, var: {}, vel: {}, var: {}, dt: {}", pos_filter.val, pos_filter.var, vel_filter.val, vel_filter.var, dt);
     }
     
 
