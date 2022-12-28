@@ -6,7 +6,7 @@ const ERROR_ITER_ACCEL: usize = 1000;
 const ERROR_ITER_BARO:  usize = 200;
 
 const ACCEL_WEIGHT: f32 = 1f32; // 1 is no modification (lower value is higher priority)
-const BARO_WEIGHT: f32 = 1f32;
+const BARO_WEIGHT: f32 = 2f32;
 
 //use crate::igniter::Igniter;
 //mod igniter;
@@ -51,10 +51,10 @@ fn main() {
         * TODO:
         * test effectiveness of performing a rolling average over accel and baro
         *   adjust window size and compare results
-        * extract Z component of GPS velocity (see TODO below)
+        * test GPS velocity corrections
         * ensure IMU acceleration rotations are working properly (not sure how to do this)
         * look into running multiple i2c lines on raspberry pi to seperate sensors
-        * add more measurements / predictions to velocity filter from baromter
+        * add baromter velocity to filter
         */
         
 
@@ -152,6 +152,10 @@ fn main() {
         var: 1000f32,
     }; // Kalman valitude
 
+    let mut last_gps: [f32; 3] = [0f32; 3];
+    let mut last_reading = Instant::now();
+    let mut complete: bool = false;
+
     // rolling averages
     let mut accels: [f32; ACCEL_ROLLING_AVERAGE] = [0f32; ACCEL_ROLLING_AVERAGE];
     let mut baros: [f32; BARO_ROLLING_AVERAGE] = [0f32; BARO_ROLLING_AVERAGE];
@@ -178,12 +182,6 @@ fn main() {
                 for i in 1..10 {
                     accels[i] = accels[i-1];
                 }
-
-                // TODO tweak values perhaps make these come from stdev?
-                // filter out values that are likely noise
-                //if z < 0.05f32 && z > -0.05f32 {
-                //    z = 0f32;
-                //}
 
                 accels[0] = z;
             },
@@ -230,10 +228,9 @@ fn main() {
         // KALMAN UPDATES
         // ====================================================================
 
-        // TODO track and combine velocity error
-        // dx = V_i * t + 1/2at^2
-        pos_filter.predict(vel_filter.val*dt + 0.5*acc*(dt*dt), (ACCEL_NOISE * ACCEL_WEIGHT) + vel_filter.var);
-        vel_filter.predict(acc*dt, ACCEL_NOISE*ACCEL_WEIGHT);
+
+        pos_filter.predict(vel_filter.val*dt + 0.5*acc*(dt*dt), (ACCEL_NOISE * ACCEL_WEIGHT * dt) + vel_filter.var);
+        vel_filter.predict(acc*dt, ACCEL_NOISE*ACCEL_WEIGHT*dt);
 
         // update from baro
         pos_filter.update(baro_alt, BARO_NOISE * BARO_WEIGHT);
@@ -241,6 +238,7 @@ fn main() {
         // update from GPS
         match gps.get_data() {
             Some(data) => {
+
                 // update altitude
                 match data.alt {
                     Some((alt, var)) => {
@@ -249,24 +247,63 @@ fn main() {
                     _ => {},
                 };
 
+                let mut get_heading = |data: &GpsData| -> Option<(f32, f32, f32)> {
+                    match data.lat {
+                        Some((lat, _)) => {
+                            match data.long {
+                                Some((long, _)) => {
+                                    match data.alt {
+                                        Some((alt, _)) => {
+                                            let mut res = None;
+                                            if complete {
+                                                println!("lat: {lat}, long: {long} last: {:?}", last_gps);
+                                                let x: f32 = (lat - last_gps[0]) * 111119f32;
+                                                let y: f32 = (long - last_gps[1]) * 111119f32;
+                                                let z: f32 = alt - last_gps[2];
+                                                res = Some((x,y,z));
+                                            }
+
+                                            last_gps[0] = lat;
+                                            last_gps[1] = long;
+                                            last_gps[2] = alt;
+                                            complete = true;
+                                            res
+                                        },
+                                        None => None,
+                                    }
+                                },
+                                None => None,
+                            }
+                        },
+                        None => None,
+                    }
+                };
+
                 // update tracked speed
                 match data.speed {
                     Some((speed, var)) => {
-                        println!("gps_vel: {}", speed);
-                        // TODO: use orientation to get Z componenet of velocity?
-                        // may not be possible without the heading componenent?
-                        // alternitively estimate velocity in all directions using accelerometer
-                        // use these 3 to compute overall heading
-                        vel_filter.update(speed, var);
+
+                        match get_heading(&data) {
+                            Some((x,y,z)) => {
+                                let mut speed_z = 0f32;
+                                if (x + y + z) != 0f32 {
+                                    let speed_z = speed*(z/(x+y+z));
+                                }
+                                vel_filter.update(speed_z, var*3f32);
+                                println!("=========({}, {}, {}) speed: {} adjusted: {}=========", x, y, z, speed, speed_z);
+                            },
+                            _ => {},
+                        }
                     },
                     _ => {},
                 }
+
             },
             _ => {},
         }
 
-        println!("baro: {}", baro_alt);
-        println!("acc: {}", acc);
+        //println!("baro: {}", baro_alt);
+        //println!("acc: {}", acc);
         println!("alt: {:4.1}, var: {}, vel: {}, var: {}, dt: {}", pos_filter.val, pos_filter.var, vel_filter.val, vel_filter.var, dt);
     }
     
