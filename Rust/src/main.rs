@@ -9,6 +9,9 @@ const ACCEL_WEIGHT: f32 = 1f32; // 1 is no modification (lower value is higher p
 const BARO_WEIGHT: f32 = 2f32;
 const BARO_VEL_WEIGHT: f32 = 4f32;
 
+// replace later
+const INITIAL_ALT: f32 = 189.7f32;
+
 //use crate::igniter::Igniter;
 //mod igniter;
 
@@ -67,14 +70,17 @@ fn main() {
     let mut gps = GPS::new();
 
     // TODO: configure baro based on GPS altitude?
-    baro.configure(189.7f32, 50);
-
+    println!("Calibrating Barometer");
+    baro.configure(INITIAL_ALT, 50);
+    println!("done\n");
     
+    println!("calibrating IMU");
     //imu.calibrate();
-    println!("{:?}", imu.get_calibration());
+    println!("{:?}\n", imu.get_calibration());
     
-    imu.calibrate_static_erorr();
-
+    println!("getting acceleromter offests");
+    let (res_x, res_y, res_z) = imu.calibrate_static_erorr();
+    println!("x: {}, y: {}, z: {}\n", res_x, res_y, res_z);
 
     println!("characterizing accel noise");
     let ACCEL_NOISE = imu.get_noise(ERROR_ITER_ACCEL);
@@ -96,9 +102,10 @@ fn main() {
         var: 0f32,
     };
 
+    // initial values should eventually be GPS or similar
     let mut pos_filter = Filter {
-        val: 0f32,
-        var: 1000f32,
+        val: INITIAL_ALT,
+        var: 2f32,
     }; // Kalman valitude
 
     // gps velocity storage

@@ -143,7 +143,7 @@ impl IMU {
         Some(IMU::rotate(accel, rot).unpack())
     }
 
-    pub fn calibrate_static_erorr(&mut self) {
+    pub fn calibrate_static_erorr(&mut self) -> (f32, f32, f32) {
         let mut x = 0f32;
         let mut y = 0f32;
         let mut z = 0f32;
@@ -153,7 +153,6 @@ impl IMU {
         while iter > 0 {
             match self.sensor.linear_acceleration() {
                 Ok(n) => {
-                    println!("{:?}", n);
                     x += n.x;
                     y += n.y;
                     z += n.z;
@@ -170,7 +169,7 @@ impl IMU {
             z: z/100f32,
         };
 
-        println!("x: {}, y: {}, z: {}", self.errors.x, self.errors.y, self.errors.z);
+        self.errors.unpack()
     }
 
     pub fn get_calibration(&mut self) -> Option<BNO055CalibrationStatus> {

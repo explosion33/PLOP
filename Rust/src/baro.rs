@@ -114,7 +114,6 @@ impl Baro {
                 Some(n) => {
                     num_pres += 1;
                     total_pres += n;
-                    println!("{n}");
                 },
                 None => {},
             };
@@ -122,7 +121,6 @@ impl Baro {
         };
     
         let avg_pres = total_pres / num_pres as f32;
-        println!("{}, {}, {}", avg_pres, total_pres, num_pres);
 
         // write data to config
         match file.write_all(format!("{}\n{}", alt, avg_pres).as_bytes()) {
