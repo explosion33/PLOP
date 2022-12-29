@@ -3,7 +3,7 @@ extern crate i2cdev;
 extern crate quaternion_core;
 
 use linux_embedded_hal::{Delay, I2cdev};
-use bno055::{BNO055OperationMode, BNO055Calibration, BNO055_CALIB_SIZE, Bno055};
+use bno055::{BNO055OperationMode, BNO055Calibration, BNO055CalibrationStatus, BNO055_CALIB_SIZE, Bno055};
 use std::io::prelude::*;
 //use bno055::mint::{Quaternion};
 
@@ -173,6 +173,13 @@ impl IMU {
         println!("x: {}, y: {}, z: {}", self.errors.x, self.errors.y, self.errors.z);
     }
 
+    pub fn get_calibration(&mut self) -> Option<BNO055CalibrationStatus> {
+        match self.sensor.get_calibration_status() {
+            Ok(n) => Some(n),
+            _ => None,
+        }
+    }
+
     pub fn calibrate(&mut self) {
         let mut file = OpenOptions::new()
             .write(true)
@@ -189,6 +196,35 @@ impl IMU {
         let calib = self.sensor.calibration_profile(&mut Delay {}).unwrap();
 
         file.write_all(calib.as_bytes());
+    }
+
+
+    pub fn get_noise(&mut self, iter: usize) -> f32 {
+        let mut vals: Vec<f32> = Vec::with_capacity(iter); 
+        let mut mean: f32 = 0f32;
+        let mut i: usize = iter;
+
+        while i > 0 {
+            match self.accel() {
+                Some((_, _, z)) => {
+                    vals.push(z);
+                    mean += z;
+                    i -= 1;
+                },
+                _ => {},
+            };
+        }
+        mean /= iter as f32;
+
+        let mut stdev: f32 = 0f32;
+
+        for val in vals {
+            stdev += (mean - val) * (mean - val);
+        }
+
+        stdev /= iter as f32;
+        return stdev.sqrt();
+
     }
 
 }

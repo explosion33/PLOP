@@ -1,5 +1,5 @@
 // tuning constants
-const ACCEL_ROLLING_AVERAGE: usize = 10;
+const ACCEL_ROLLING_AVERAGE: usize = 2;
 const BARO_ROLLING_AVERAGE: usize = 10;
 
 const ERROR_ITER_ACCEL: usize = 1000;
@@ -7,6 +7,7 @@ const ERROR_ITER_BARO:  usize = 200;
 
 const ACCEL_WEIGHT: f32 = 1f32; // 1 is no modification (lower value is higher priority)
 const BARO_WEIGHT: f32 = 2f32;
+const BARO_VEL_WEIGHT: f32 = 4f32;
 
 //use crate::igniter::Igniter;
 //mod igniter;
@@ -70,65 +71,16 @@ fn main() {
 
     
     //imu.calibrate();
+    println!("{:?}", imu.get_calibration());
+    
     imu.calibrate_static_erorr();
 
-    // ====================================================================
-    // CHARACTERIZE SENSOR NOISE
-    // ====================================================================
+
     println!("characterizing accel noise");
-    let mut i: usize = ERROR_ITER_ACCEL;
-    let mut vals: [f32; ERROR_ITER_ACCEL] = [0f32; ERROR_ITER_ACCEL];
-    let mut mean: f32 = 0f32;
-    while i > 0 {
-        match imu.accel() {
-            Some((_, _, z)) => {
-                vals[i-1] = z;
-                mean += z;
-                i -= 1;
-            },
-            _ => {},
-        };
-    }
-    mean /= ERROR_ITER_ACCEL as f32;
-
-    let mut stdev: f32 = 0f32;
-
-    for i in 0..ERROR_ITER_ACCEL {
-        stdev += (mean - vals[i]) * (mean - vals[i]);
-    }
-
-    stdev /= ERROR_ITER_ACCEL as f32;
-    let ACCEL_NOISE: f32 = stdev.sqrt();
-
+    let ACCEL_NOISE = imu.get_noise(ERROR_ITER_ACCEL);
     
-
     println!("characterizing baro noise");
-    i = ERROR_ITER_BARO;
-    let mut vals: [f32; ERROR_ITER_BARO] = [0f32; ERROR_ITER_BARO];
-    let mut mean: f32 = 0f32;
-
-    while i > 0 {
-        match baro.get_alt() {
-            Some(alt) => {
-                vals[i-1] = alt;
-                mean += alt;
-                i -= 1;
-            },
-            _ => {
-            },
-        };
-    }
-    
-    mean /= ERROR_ITER_BARO as f32;
-
-    let mut stdev: f32 = 0f32;
-
-    for i in 0..ERROR_ITER_BARO {
-        stdev += (mean - vals[i]) * (mean - vals[i]);
-    }
-
-    stdev /= ERROR_ITER_BARO as f32;
-    let BARO_NOISE: f32 = stdev.sqrt();
+    let BARO_NOISE = baro.get_noise(ERROR_ITER_BARO);
 
     println!("accel noise: {}, baro noise: {}", ACCEL_NOISE, BARO_NOISE);
 
@@ -139,12 +91,9 @@ fn main() {
     // dt
     let mut start = Instant::now();
 
-    // tracked values
-    //let mut vel: f32 = 0f32;
-
     let mut vel_filter = Filter {
         val: 0f32,
-        var: 1000f32,
+        var: 0f32,
     };
 
     let mut pos_filter = Filter {
@@ -152,9 +101,13 @@ fn main() {
         var: 1000f32,
     }; // Kalman valitude
 
+    // gps velocity storage
     let mut last_gps: [f32; 3] = [0f32; 3];
     let mut last_reading = Instant::now();
     let mut complete: bool = false;
+
+    // baro velocity storage
+    let mut last_baro_alt: f32 = 0f32;
 
     // rolling averages
     let mut accels: [f32; ACCEL_ROLLING_AVERAGE] = [0f32; ACCEL_ROLLING_AVERAGE];
@@ -179,7 +132,7 @@ fn main() {
         // update accel rolling average
         match imu.accel() {
             Some((_, _, mut z)) => {
-                for i in 1..10 {
+                for i in 1..ACCEL_ROLLING_AVERAGE {
                     accels[i] = accels[i-1];
                 }
 
@@ -191,10 +144,7 @@ fn main() {
         // update baro rolling average
         match baro.get_alt() {
             Some(alt) => {
-                //filter.update(alt, 0.5f32);
-                //println!("{}", alt);
-
-                for i in 1..10 {
+                for i in 1..BARO_ROLLING_AVERAGE {
                     baros[i] = baros[i-1];
                 }
                 baros[0] = alt;
@@ -203,11 +153,6 @@ fn main() {
             },
         };
 
-        // fill imu and baro windows before averaging
-        if iter > 0 {
-            iter -= 1;
-            continue;
-        }
 
         // average accel readings
         let mut acc = 0f32;
@@ -232,8 +177,12 @@ fn main() {
         pos_filter.predict(vel_filter.val*dt + 0.5*acc*(dt*dt), (ACCEL_NOISE * ACCEL_WEIGHT * dt) + vel_filter.var);
         vel_filter.predict(acc*dt, ACCEL_NOISE*ACCEL_WEIGHT*dt);
 
+        //println!("baro_vel: {}, var: {}", (baro_alt - last_baro_alt) * dt, BARO_NOISE * BARO_NOISE * BARO_VEL_WEIGHT);
+
         // update from baro
         pos_filter.update(baro_alt, BARO_NOISE * BARO_WEIGHT);
+        vel_filter.update((baro_alt - last_baro_alt) * dt, BARO_NOISE * BARO_NOISE * BARO_VEL_WEIGHT);
+        last_baro_alt = baro_alt;
 
         // update from GPS
         match gps.get_data() {

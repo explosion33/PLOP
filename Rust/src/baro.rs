@@ -233,4 +233,33 @@ impl Baro {
         Some(res)
     }
 
+
+    pub fn get_noise(&mut self, iter: usize) -> f32 {
+        let mut vals: Vec<f32> = Vec::with_capacity(iter); 
+        let mut mean: f32 = 0f32;
+        let mut i: usize = iter;
+
+        while i > 0 {
+            match self.get_alt() {
+                Some(alt) => {
+                    vals.push(alt);
+                    mean += alt;
+                    i -= 1;
+                },
+                _ => {
+                },
+            };
+        }
+        
+        mean /= iter as f32;
+
+        let mut stdev: f32 = 0f32;
+
+        for val in vals {
+            stdev += (mean - val) * (mean - val);
+        }
+
+        stdev /= iter as f32;
+        return stdev.sqrt();
+    }
 }
