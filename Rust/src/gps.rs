@@ -96,7 +96,7 @@ impl Data {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GpsData {
     pub lat: Option<(f32, f32)>,
     pub long: Option<(f32, f32)>,
@@ -109,6 +109,7 @@ pub struct GPS {
     gps: Arc<Mutex<Gps>>,
     async_run: Arc<Mutex<bool>>,
     latest_data: Arc<Mutex<Data>>,
+    last_data: Option<GpsData>,
 }
 
 impl GPS {
@@ -121,7 +122,7 @@ impl GPS {
 
         gps.pmtk_314_api_set_nmea_output(NmeaOutput{gga: 1, gsa: 1, gsv: 0,  gll: 0, rmc: 0, vtg: 1, pmtkchn_interval: 1 });
         let r = gps.pmtk_220_set_nmea_updaterate("100");
-        println!("{:?}", r);
+        println!("GPS update: {:?}", r);
 
         let gps = Arc::new(Mutex::new(gps));
         let async_run = Arc::new(Mutex::new(true));
@@ -190,6 +191,7 @@ impl GPS {
             gps,
             async_run,
             latest_data,
+            last_data: None,
         }
     }
 
@@ -198,13 +200,20 @@ impl GPS {
         
         //println!("{:?}", data);
         if !data.ready() {
+            //self.last_data = None;
             return None;
         }
 
         let res = data.toUser();
 
+        self.last_data = Some(res.clone());
+
         *data = Data::new();
 
         return Some(res);
+    }
+
+    pub fn last_data(&self) -> Option<GpsData> {
+        self.last_data.clone()
     }
 }

@@ -22,6 +22,7 @@ pub struct Baro {
     config_path: String,
     pub base_alt: f32,
     pub base_pres: f32,
+    pub last_alt: Option<f32>,
 
 }
 
@@ -66,6 +67,7 @@ impl Baro {
             config_path: String::from(config_path),
             base_alt,
             base_pres,
+            last_alt: None,
         })
     }
 
@@ -215,12 +217,18 @@ impl Baro {
     pub fn get_alt(&mut self) -> Option<f32> {
         let p = match self.get_pressure() {
             Some(n) => n,
-            None => {return None;}
+            None => {
+                //self.last_alt = None;
+                return None;
+            }
         };
 
         let t = match self.get_temp() {
             Some(n) => n + 273.15,
-            None => {return None;}
+            None => {
+                //self.last_alt = None;
+                return None;
+            }
         };
         
         //C to Kelvin
@@ -228,7 +236,14 @@ impl Baro {
         const RATIO2: f32 = 0.0065;
 
         let res: f32 = self.base_alt + ((((self.base_pres/p).powf(RATIO))-1.0)*t)/RATIO2;
+
+        self.last_alt = Some(res);
+
         Some(res)
+    }
+
+    pub fn last_alt(&mut self) -> Option<f32> {
+        self.last_alt
     }
 
 
@@ -259,5 +274,23 @@ impl Baro {
 
         stdev /= iter as f32;
         return stdev.sqrt();
+    }
+
+    pub fn get_frequency(&mut self) -> usize {
+        let start = Instant::now();
+
+        let mut iter: usize = 200;
+        while iter > 0 {
+            match self.get_alt() {
+                Some(_) => {
+                    iter -= 1;
+                },
+                _ => {},
+            }
+        }
+
+        let time = start.elapsed().as_secs_f32();
+
+        (200f32 / time) as usize
     }
 }

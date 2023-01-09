@@ -38,6 +38,7 @@ pub struct IMU {
     path: String,
 
     errors: Vec3,
+    last_accel: Option<(f32, f32, f32)>,
 }
 
 impl IMU {
@@ -59,6 +60,7 @@ impl IMU {
                     sensor,
                     path: path.to_string(),
                     errors: Vec3::new(),
+                    last_accel: None,
                 };
             }
         };
@@ -75,6 +77,7 @@ impl IMU {
             sensor,
             path: path.to_string(),
             errors: Vec3::new(),
+            last_accel: None,
         }
     }
 
@@ -129,18 +132,30 @@ impl IMU {
                     z: n.z - self.errors.z,
                 }
             }
-            Err(_) => {return None;},
+            Err(_) => {
+                self.last_accel = None;
+                return None;
+            },
         };
 
         let rot = match self.quaternion() {
             Some(n) => n,
             None => {
+                self.last_accel = None;
                 return None;
             }
         };
 
         //Some(accel.unpack())
-        Some(IMU::rotate(accel, rot).unpack())
+        let res = IMU::rotate(accel, rot);
+
+        self.last_accel = Some(res.unpack());
+
+        Some(res.unpack())
+    }
+
+    pub fn last_accel(&self) -> Option<(f32, f32, f32)> {
+        self.last_accel
     }
 
     pub fn calibrate_static_erorr(&mut self) -> (f32, f32, f32) {
@@ -224,6 +239,24 @@ impl IMU {
         stdev /= iter as f32;
         return stdev.sqrt();
 
+    }
+
+    pub fn get_frequency(&mut self) -> usize {
+        let start = Instant::now();
+
+        let mut iter: usize = 1000;
+        while iter > 0 {
+            match self.accel() {
+                Some(_) => {
+                    iter -= 1;
+                },
+                _ => {},
+            }
+        }
+
+        let time = start.elapsed().as_secs_f32();
+
+        (1000f32 / time) as usize
     }
 
 }

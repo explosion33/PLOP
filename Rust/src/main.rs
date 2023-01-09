@@ -1,6 +1,5 @@
 // tuning constants
-const ACCEL_ROLLING_AVERAGE: usize = 1;
-const BARO_ROLLING_AVERAGE: usize = 20;
+const BARO_ROLLING_AVERAGE: usize = 100;
 
 const ERROR_ITER_ACCEL: usize = 1000;
 const ERROR_ITER_BARO:  usize = 200;
@@ -10,7 +9,7 @@ const BARO_WEIGHT: f32 = 3f32;
 const BARO_VEL_WEIGHT: f32 = 4f32;
 
 // replace later
-const INITIAL_ALT: f32 = 700f32;
+const INITIAL_ALT: f32 = 49f32;
 
 //use crate::igniter::Igniter;
 //mod igniter;
@@ -54,6 +53,8 @@ struct KalmanFilter {
     pub velocity: Filter,
     pub altitude: Filter,
 
+    baro_iter: usize,
+
     // gps velocity storage
     last_gps: [f32; 3],
     complete: bool,
@@ -62,7 +63,7 @@ struct KalmanFilter {
     last_baro_alt: f32,
 
     // rolling averages
-    accels: [f32; ACCEL_ROLLING_AVERAGE],
+    filtered_accel: f32,
     baros: [f32; BARO_ROLLING_AVERAGE],
 
     ACCEL_WEIGHT: f32,
@@ -84,10 +85,11 @@ impl KalmanFilter {
                 val: alt,
                 var: 0f32,
             },
+            baro_iter: 10,
             last_gps: [0f32; 3],
             complete: false,
             last_baro_alt: alt,
-            accels: [0f32; ACCEL_ROLLING_AVERAGE],
+            filtered_accel: 0f32,
             baros: [0f32; BARO_ROLLING_AVERAGE],
 
             ACCEL_WEIGHT: accel_weight,
@@ -99,22 +101,17 @@ impl KalmanFilter {
 
     fn tick_accel(&mut self, imu: &mut IMU) -> f32 {
         match imu.accel() {
-            Some((_, _, mut z)) => {
-                for i in 1..ACCEL_ROLLING_AVERAGE {
-                    self.accels[i] = self.accels[i-1];
-                }
-
-                self.accels[0] = z;
+            Some((_, _, z)) => {
+                //self.filtered_accel = ((1.0 - ACCEL_LOW_PASS) * self.filtered_accel) + (ACCEL_LOW_PASS);
+                z
+            }
+            None => {
+                0f32
             },
-            _ => {},
         }
 
-        let mut acc = 0f32;
-        for i in 0..ACCEL_ROLLING_AVERAGE {
-            acc += self.accels[i]
-        }
-        acc /= ACCEL_ROLLING_AVERAGE as f32;
-        return acc;
+        //self.filtered_accel
+        
     }
 
     fn tick_baro(&mut self, baro: &mut Baro) -> f32 {
@@ -143,16 +140,27 @@ impl KalmanFilter {
 
 
         let acc = self.tick_accel(imu);
-        let baro_alt = self.tick_baro(baro);
+
+        if self.baro_iter == 0 {
+            self.baro_iter = 10;
+
+            let baro_alt = self.tick_baro(baro);
+            println!("baro_alt: {}", baro_alt);
+
+            // update from baro
+            self.altitude.update(baro_alt, self.BARO_WEIGHT*dt);
+            self.velocity.update((baro_alt - self.last_baro_alt) * dt, self.BARO_VEL_WEIGHT*dt);
+            self.last_baro_alt = baro_alt;
+        }
+        else {
+            self.baro_iter -= 1;
+        }
 
 
         self.altitude.predict(self.velocity.val*dt + 0.5*acc*(dt*dt), (self.ACCEL_WEIGHT * dt) + self.velocity.var*dt);
         self.velocity.predict(acc*dt, self.ACCEL_WEIGHT*dt);
 
-        // update from baro
-        self.altitude.update(baro_alt, self.BARO_WEIGHT*dt);
-        self.velocity.update((baro_alt - self.last_baro_alt) * dt, self.BARO_VEL_WEIGHT*dt);
-        self.last_baro_alt = baro_alt;
+        
 
         // update from GPS
         match gps.get_data() {
@@ -230,16 +238,19 @@ fn main() {
         * test GPS velocity corrections
         * ensure IMU acceleration rotations are working properly (not sure how to do this)
         * look into running multiple i2c lines on raspberry pi to seperate sensors
-        * add baromter velocity to filter
         */
         
 
     // ====================================================================
     // INIT AND CALIBRATE SENSORS
     // ====================================================================
+    println!("getting sensors");
     let mut imu = IMU::new("imu.conf");
     let mut baro = Baro::new("baro.conf").unwrap();
     let mut gps = GPS::new();
+
+    //println!("{:?}", imu.get_frequency());
+    //println!("{:?}", baro.get_frequency());
 
     // TODO: configure baro based on GPS altitude?
     println!("Calibrating Barometer");
@@ -272,13 +283,27 @@ fn main() {
         1f32
     );
 
+    let mut i = 0;
+    let mut vals: Vec<f32> = Vec::with_capacity(1000);
+    let mut z_accels: Vec<f32> = Vec::with_capacity(1000);
+    let mut baro_alts: Vec<f32> = Vec::with_capacity(1000);
     loop {
         filter.tick(&mut imu, &mut baro, &mut gps);
+        
 
-        println!("alt: {:4.1}, var: {}, vel: {}, var: {}", filter.altitude.val, filter.altitude.var, filter.velocity.val, filter.velocity.var);
+        println!("alt: {:4.1}, var: {}, vel: {}, var: {}, {}", filter.altitude.val, filter.altitude.var, filter.velocity.val, filter.velocity.var, i);
+        
+        if i >= 1000 {
+            vals.push(filter.altitude.val);
+            z_accels.push(imu.last_accel().unwrap().2);
+            baro_alts.push(baro.last_alt().unwrap());
+        }
+
+        if i >= 2000 {
+            println!("F={:?}\nA={:?}\nB={:?}", vals, z_accels, baro_alts);
+            return;
+        }
+
+        i += 1;
     }
-    
-
-
-    // FIRE IGNITER
 }
