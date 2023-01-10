@@ -26,7 +26,6 @@ pub struct Baro {
 
 }
 
-// TODO make baro code asyncronous
 
 impl Baro {
     pub fn new(config_path: &str) -> Option<Baro> {

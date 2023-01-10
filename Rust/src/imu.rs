@@ -82,12 +82,6 @@ impl IMU {
     }
 
     pub fn euler(&mut self) -> Option<(f32, f32, f32)> {
-        // TODO calculate from quaternion as recommended by bosch (Ndof firmware issue)
-        /*match self.sensor.euler_angles() {
-            Ok(n) => {Some((n.a, n.b, n.c))},
-            Err(_) => None,
-        }*/
-
         match self.quaternion() {
             Some(n) => {
                 let v = to_euler_angles(RotationType::Extrinsic, RotationSequence::XYZ, n);
@@ -123,7 +117,6 @@ impl IMU {
     }
 
     pub fn accel(&mut self) -> Option<(f32, f32, f32)> {
-        //TODO: rotate based on current orientation
         let accel = match self.sensor.linear_acceleration() {
             Ok(n) => {
                 Vec3 {

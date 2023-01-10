@@ -8,10 +8,6 @@ use adafruit_gps::set_baud_rate;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-// TODO:
-//  experiment with increasing speeds (current 1Hz, max 10Hz)
-//  research the best way to get error
-//      (current DOP * 3m for maximum potential error)
 
 #[derive(Debug, Clone)]
 struct Data {
