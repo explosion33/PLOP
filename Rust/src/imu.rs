@@ -133,7 +133,7 @@ impl IMU {
                 }
             }
             Err(_) => {
-                self.last_accel = None;
+                //self.last_accel = None;
                 return None;
             },
         };
@@ -141,7 +141,7 @@ impl IMU {
         let rot = match self.quaternion() {
             Some(n) => n,
             None => {
-                self.last_accel = None;
+                //self.last_accel = None;
                 return None;
             }
         };

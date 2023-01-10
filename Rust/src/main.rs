@@ -5,11 +5,12 @@ const ERROR_ITER_ACCEL: usize = 1000;
 const ERROR_ITER_BARO:  usize = 200;
 
 const ACCEL_WEIGHT: f32 = 1f32; // 1 is no modification (lower value is higher priority)
-const BARO_WEIGHT: f32 = 3f32;
-const BARO_VEL_WEIGHT: f32 = 4f32;
+const BARO_WEIGHT: f32 = 60f32;
+const BARO_VEL_WEIGHT: f32 = 200f32;
 
 // replace later
-const INITIAL_ALT: f32 = 49f32;
+const INITIAL_ALT: f32 = 48f32;
+const I2C_FREQ_RATIO: usize = 11; // (IMU hz) / (BARO hz)
 
 //use crate::igniter::Igniter;
 //mod igniter;
@@ -85,7 +86,7 @@ impl KalmanFilter {
                 val: alt,
                 var: 0f32,
             },
-            baro_iter: 10,
+            baro_iter: I2C_FREQ_RATIO,
             last_gps: [0f32; 3],
             complete: false,
             last_baro_alt: alt,
@@ -141,8 +142,11 @@ impl KalmanFilter {
 
         let acc = self.tick_accel(imu);
 
+        self.altitude.predict(self.velocity.val*dt + 0.5*acc*(dt*dt), (self.ACCEL_WEIGHT * dt) + self.velocity.var*dt);
+        self.velocity.predict(acc*dt, self.ACCEL_WEIGHT*dt);
+
         if self.baro_iter == 0 {
-            self.baro_iter = 10;
+            self.baro_iter = I2C_FREQ_RATIO;
 
             let baro_alt = self.tick_baro(baro);
             println!("baro_alt: {}", baro_alt);
@@ -152,13 +156,8 @@ impl KalmanFilter {
             self.velocity.update((baro_alt - self.last_baro_alt) * dt, self.BARO_VEL_WEIGHT*dt);
             self.last_baro_alt = baro_alt;
         }
-        else {
-            self.baro_iter -= 1;
-        }
+        self.baro_iter -= 1;
 
-
-        self.altitude.predict(self.velocity.val*dt + 0.5*acc*(dt*dt), (self.ACCEL_WEIGHT * dt) + self.velocity.var*dt);
-        self.velocity.predict(acc*dt, self.ACCEL_WEIGHT*dt);
 
         
 
@@ -236,7 +235,8 @@ fn main() {
         * test effectiveness of performing a rolling average over accel and baro
         *   adjust window size and compare results
         * test GPS velocity corrections
-        * ensure IMU acceleration rotations are working properly (not sure how to do this)
+        * ensure IMU acceleration rotations are working properly
+        *   brief testing it looks like one of the axis is inverted with respect to Z
         * look into running multiple i2c lines on raspberry pi to seperate sensors
         */
         
@@ -291,9 +291,9 @@ fn main() {
         filter.tick(&mut imu, &mut baro, &mut gps);
         
 
-        println!("alt: {:4.1}, var: {}, vel: {}, var: {}, {}", filter.altitude.val, filter.altitude.var, filter.velocity.val, filter.velocity.var, i);
+        println!("alt: {:4.1}, var: {}, vel: {}, var: {}, z: {}, {}", filter.altitude.val, filter.altitude.var, filter.velocity.val, filter.velocity.var, imu.last_accel().unwrap().2, i);
         
-        if i >= 1000 {
+        /*if i >= 1000 {
             vals.push(filter.altitude.val);
             z_accels.push(imu.last_accel().unwrap().2);
             baro_alts.push(baro.last_alt().unwrap());
@@ -304,6 +304,6 @@ fn main() {
             return;
         }
 
-        i += 1;
+        i += 1;*/
     }
 }
