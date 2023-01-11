@@ -16,7 +16,7 @@ cargo –version
 
 ### Setup
 ```
-git clone https://github.com/explosion33/RocketController.git
+git clone https://github.com/explosion33/PLOP.git
 ```
 
 to run the debug code
@@ -29,11 +29,8 @@ cargo run
 cargo build --release
 ```
 
-## Using the latest release
-download the latest [release](https://github.com/explosion33/RocketController/releases) onto raspbery pi or pi-like device
-
-edit `rocket.toml` to change api server settings and `flight.ini` to adjust in-flight calculation settings
-
-run with `./path/to/rocket_controller`
-
-'test'
+### Compiling for raspberrypi zero 2W
+```
+rustup target add arm-unknown-linux-musleabi
+cargo run --target=arm-unknown-linux-musleabi
+```
