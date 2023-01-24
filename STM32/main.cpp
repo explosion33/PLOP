@@ -54,7 +54,7 @@ int main()
     pc.printf("X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
 
     double error = imu.get_noise(400);
-    pc.printf("%d\n", (int)(error*1000));
+    pc.printf("noise: %s\n", to_str(error).c);
 
     ThisThread::sleep_for(10s);
     

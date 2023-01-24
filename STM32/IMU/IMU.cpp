@@ -59,37 +59,33 @@ vec3 IMU::cross(vec3 a, vec3 b) {
     return res;
 }
 
-quat IMU::mult_quat(quat a, quat b) {
-    quat res;
-
-    res.w=(a.w*b.w)-(a.x*b.x)-(a.y*b.y)-(a.z*b.z);
-    res.x=(a.x*b.w)+(a.w*b.x)-(a.z*b.y)+(a.y*b.z);
-    res.y=(a.y*b.w)+(a.z*b.x)+(a.w*b.y)-(a.x*b.z);
-    res.z=(a.z*b.w)-(a.y*b.x)+(a.x*b.y)+(a.w*b.z);
-
-    return res;
-}
-
 vec3 IMU::rotate(vec3 vec, quat rot) {
-    quat qp = rot;
-    qp.x *= -1;
-    qp.y *= -1;
-    qp.z *= -1;
+    vec3 t = vec;
+    vec.x = t.z;
+    vec.z = t.x;
 
-    quat qv;
-    qv.w = 0;
-    qv.x = vec.x;
-    qv.y = vec.y;
-    qv.z = vec.z;
+    vec3 qv;
+    qv.x = rot.x;
+    qv.y = rot.y;
+    qv.z = rot.z;
 
-    quat res = mult_quat(mult_quat(qp, qv), rot);
+    vec3 c1 = cross(vec, qv);
 
-    vec3 out;
-    out.x = res.x;
-    out.y = res.y;
-    out.z = res.z;
+    vec3 temp;
+    temp.x = (rot.w * vec.x) + c1.x;
+    temp.y = (rot.w * vec.y) + c1.y;
+    temp.z = (rot.w * vec.z) + c1.z;
 
-    return out;
+    vec3 c2 = cross(temp, qv);
+
+    vec3 res;
+    res.z = vec.x + (2.0 * c2.x);
+    res.y = vec.y + (2.0 * c2.y);
+    res.x = vec.z + (2.0 * c2.z);
+
+    res.z *= -1;
+    
+    return res;
 }
 
 vec3 IMU::calibrate_static_error(size_t iter) {

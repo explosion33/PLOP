@@ -36,7 +36,6 @@ private:
     vec3 rotate(vec3 vec, quat rot);
 
     vec3 cross(vec3 a, vec3 b);
-    quat mult_quat(quat a, quat b);
 
 private:
     bool has_reset_pin;
