@@ -87,7 +87,7 @@ vec3 IMU::rotate(vec3 vec, quat rot) {
     return res;
 }
 
-vec3 IMU::calibrate_static_error(size_t iter, SerialStream<BufferedSerial>* pc) {
+vec3 IMU::calibrate_static_error(size_t iter) {
     this->errors.x = 0.0;
     this->errors.y = 0.0;
     this->errors.z = 0.0;
@@ -99,8 +99,6 @@ vec3 IMU::calibrate_static_error(size_t iter, SerialStream<BufferedSerial>* pc) 
 
     for (int i = 0; i<iter; i++) {
         vec3 res = this->accel();
-
-        pc->printf("%s, %s, %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
 
         totals.x += res.x;
         totals.y += res.y;

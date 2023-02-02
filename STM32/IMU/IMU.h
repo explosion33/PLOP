@@ -28,7 +28,7 @@ public:
     quat quaternion();
     vec3 accel();
 
-    vec3 calibrate_static_error(size_t iter, SerialStream<BufferedSerial>* pc);
+    vec3 calibrate_static_error(size_t iter);
     calib get_calibration();
 
     double get_noise(size_t iter);
