@@ -2,6 +2,7 @@
 #include "mbed.h"
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 IMU::IMU(I2C& i2c, PinName p_reset) : sensor(i2c, p_reset) {
     this->has_reset_pin = true;
@@ -40,13 +41,17 @@ vec3 IMU::accel() {
     this->sensor.get_linear_accel(&this->accel_storage);
 
     vec3 res;
-    res.x = this->accel_storage.x - this->errors.x;
-    res.y = this->accel_storage.y - this->errors.y;
-    res.z = this->accel_storage.z - this->errors.z;
+    res.x = this->accel_storage.x;
+    res.y = this->accel_storage.y;
+    res.z = this->accel_storage.z;
 
+    res = this->rotate(res, this->quaternion());
 
+    res.x -= this->errors.x;
+    res.y -= this->errors.y;
+    res.z -= this->errors.z;
 
-    return this->rotate(res, this->quaternion());
+    return res;
 }
 
 vec3 IMU::cross(vec3 a, vec3 b) {
@@ -60,10 +65,6 @@ vec3 IMU::cross(vec3 a, vec3 b) {
 }
 
 vec3 IMU::rotate(vec3 vec, quat rot) {
-    vec3 t = vec;
-    vec.x = t.z;
-    vec.z = t.x;
-
     vec3 qv;
     qv.x = rot.x;
     qv.y = rot.y;
@@ -79,33 +80,40 @@ vec3 IMU::rotate(vec3 vec, quat rot) {
     vec3 c2 = cross(temp, qv);
 
     vec3 res;
-    res.z = vec.x + (2.0 * c2.x);
+    res.x = vec.x + (2.0 * c2.x);
     res.y = vec.y + (2.0 * c2.y);
-    res.x = vec.z + (2.0 * c2.z);
-
-    res.z *= -1;
+    res.z = vec.z + (2.0 * c2.z);
     
     return res;
 }
 
-vec3 IMU::calibrate_static_error(size_t iter) {
-    this->errors.x = 0;
-    this->errors.y = 0;
-    this->errors.z = 0;
+vec3 IMU::calibrate_static_error(size_t iter, SerialStream<BufferedSerial>* pc) {
+    this->errors.x = 0.0;
+    this->errors.y = 0.0;
+    this->errors.z = 0.0;
+
+    vec3 totals;
+    totals.x = 0.0;
+    totals.y = 0.0;
+    totals.z = 0.0;
 
     for (int i = 0; i<iter; i++) {
-        this->sensor.get_linear_accel(&this->accel_storage);
+        vec3 res = this->accel();
 
-        this->errors.x += this->accel_storage.x;
-        this->errors.y += this->accel_storage.y;
-        this->errors.z += this->accel_storage.z;
+        pc->printf("%s, %s, %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
 
-        ThisThread::sleep_for(20ms);
+        totals.x += res.x;
+        totals.y += res.y;
+        totals.z += res.z;
+
+        ThisThread::sleep_for(30ms);
     }
 
-    this->errors.x /= (double)iter;
-    this->errors.y /= (double)iter;
-    this->errors.z /= (double)iter;
+    totals.x /= (double)iter;
+    totals.y /= (double)iter;
+    totals.z /= (double)iter;
+
+    this->errors = totals;
 
     return this->errors;
 }
