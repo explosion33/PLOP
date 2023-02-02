@@ -1,7 +1,11 @@
+#ifndef IMU_H
+#define IMU_H
+
 #include "mbed.h"
 #include "BNO055.h"
 #include <cstddef>
 #include <cstdint>
+#include "SerialStream.h"
 
 struct vec3 {
     double x, y, z;
@@ -24,7 +28,7 @@ public:
     quat quaternion();
     vec3 accel();
 
-    vec3 calibrate_static_error(size_t iter);
+    vec3 calibrate_static_error(size_t iter, SerialStream<BufferedSerial>* pc);
     calib get_calibration();
 
     double get_noise(size_t iter);
@@ -48,3 +52,5 @@ private:
 	
 	vec3 errors;
 };
+
+#endif

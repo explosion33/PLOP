@@ -1,20 +1,13 @@
+#ifndef BARO_H
+#define BARO_H
+
 #include "mbed.h"
 #include "BMP180.h"
-#include "SerialStream.h"
+#include "Option.h"
 
-#define match(a, b) a.val; if(!a.has) {return Option<b>();}
 
 #define RATIO1 0.19022256
 #define RATIO2 0.0065
-
-template <typename T>
-struct Option {
-    T val;
-    bool has;
-
-    Option() : has(false) {}
-    Option(const T& value) : has(true), val(value) {}
-};
 
 class Baro {
 public:
@@ -37,3 +30,5 @@ private:
     int base_alt;
     float base_pres;
 };
+
+#endif
