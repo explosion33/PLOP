@@ -1,8 +1,7 @@
 #ifndef SERIALSTREAM_H
 #define SERIALSTREAM_H
 
-#include "mbed.h"
-#include <platform/Stream.h>
+#include <mbed.h>
 
 struct str {
     char c[12];
