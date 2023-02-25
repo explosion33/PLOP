@@ -29,12 +29,13 @@ public:
     vec3 accel();
 
     vec3 calibrate_static_error(size_t iter);
-    calib get_calibration();
+    calib get_calibration(uint8_t *_state);
 
     double get_noise(size_t iter);
 
     bool reset();
-    
+
+    int conn_status; // -1 for not connected, 1 for working, 0 for connection lost
 
 private:
     vec3 rotate(vec3 vec, quat rot);

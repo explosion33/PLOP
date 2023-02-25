@@ -24,7 +24,7 @@ vec3 IMU::euler() {
 }
 
 quat IMU::quaternion() {
-    this->sensor.get_quaternion(&this->quat_storage);
+    this->conn_status = this->sensor.get_quaternion(&this->quat_storage);
 
     //double scale = ((double)(1 << 14));
 
@@ -38,7 +38,7 @@ quat IMU::quaternion() {
 }
 
 vec3 IMU::accel() {
-    this->sensor.get_linear_accel(&this->accel_storage);
+    this->conn_status = this->sensor.get_linear_accel(&this->accel_storage);
 
     vec3 res;
     res.x = this->accel_storage.x;
@@ -116,8 +116,8 @@ vec3 IMU::calibrate_static_error(size_t iter) {
     return this->errors;
 }
 
-calib IMU::get_calibration() {
-    uint8_t reg = this->sensor.read_calib_status();
+calib IMU::get_calibration(uint8_t *_state) {
+    uint8_t reg = this->sensor.read_calib_status(_state);
 
     calib res;
 
@@ -156,5 +156,4 @@ bool IMU::reset() {
         this->sensor.reset();
     
     return this->has_reset_pin;
-
 }

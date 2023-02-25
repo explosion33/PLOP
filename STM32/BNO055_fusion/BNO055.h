@@ -170,34 +170,39 @@ public:
 
     /** Get Euler Angles
      * @param double type of 3D data address
+     * @return uint8 0 for failed, 1 for success
      */
-    void get_Euler_Angles(BNO055_EULER_TypeDef *el);
+    uint8_t get_Euler_Angles(BNO055_EULER_TypeDef *el);
 
     /** Get Quaternion XYZ&W
      * @param int16_t type of 4D data address
+     * @return uint8 0 for failed, 1 for success
      */
-    void get_quaternion(BNO055_QUATERNION_TypeDef *qua);
+    uint8_t get_quaternion(BNO055_QUATERNION_TypeDef *qua);
 
     /** Get Linear accel data
      * @param double type of 3D data address
+     * @return uint8_t 0 for failed, 1 for success
      */
-    void get_linear_accel(BNO055_LIN_ACC_TypeDef *la);
+    uint8_t get_linear_accel(BNO055_LIN_ACC_TypeDef *la);
 
     /** Get Gravity data
      * @param double type of 3D data address
+     * @return uint8_t 0 for failed, 1 for success
      */
-    void get_gravity(BNO055_GRAVITY_TypeDef *gr);
+    uint8_t get_gravity(BNO055_GRAVITY_TypeDef *gr);
 
     /** Get Chip temperature data both Acc & Gyro
      * @param int8_t type of data address
+     * @return uint8_t 0 for failed, 1 for success
      */
-    void get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp);
+    uint8_t get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp);
 
     /** Change fusion mode
       * @param fusion mode
-      * @return none
+      * @return uint8_t 0 for failed, 1 for success
       */
-    void change_fusion_mode(uint8_t mode);
+    uint8_t change_fusion_mode(uint8_t mode);
 
     /** Set Mouting position
       *  Please make sure your mounting direction of BNO055 chip
@@ -205,13 +210,13 @@ public:
       * @param Set P0 to P7 mounting position data
       * @return none
       */
-    void set_mounting_position(uint8_t position);
+    uint8_t set_mounting_position(uint8_t position);
 
     /** Read BNO055 ID information
       * @param ID information address
-      * @return none
+      * @return uint8_t 0 for failed, 1 for success
       */
-    void read_id_inf(BNO055_ID_INF_TypeDef *id);
+    uint8_t read_id_inf(BNO055_ID_INF_TypeDef *id);
 
     /** Check chip is avairable or not
       * @param none
@@ -223,7 +228,7 @@ public:
       * @param none
       * @return SYS(7:6),GYR(5:4),ACC(3:2),MAG(1:0) 3 = Calibrated, 0= not yet
       */
-    uint8_t read_calib_status(void);
+    uint8_t read_calib_status(uint8_t* conn_state);
 
     /** Reset
       * @param none

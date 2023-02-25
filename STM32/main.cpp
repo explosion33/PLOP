@@ -93,9 +93,21 @@ int main() {
 
 }
 */
+// setup the serial from here
+// Specify different pins to test printing on UART other than the console UART.
+#define TARGET_TX_PIN                                                     USBTX
+#define TARGET_RX_PIN                                                     USBRX
+
+// Create a BufferedSerial object to be used by the system I/O retarget code.
+static BufferedSerial serial_port(TARGET_TX_PIN, TARGET_RX_PIN, 9600);
+
+FileHandle *mbed::mbed_override_console(int fd)
+{
+    return &serial_port;
+}
+// end of serial setup
 
 // async Kalman Filter
-
 void blink() {
     while (true) {
         led = !led;
@@ -108,17 +120,56 @@ int main() {
     Thread t;
     t.start(blink);
 
+    printf(
+        "PLOP Onboard Mbed OS version %d.%d.%d\n",
+        MBED_MAJOR_VERSION,
+        MBED_MINOR_VERSION,
+        MBED_PATCH_VERSION
+    );
     // ================== CONFIG IMU ==================
-    pc.printf("getting IMU %s, %s, %s, %s\n", to_str(0.259).c, to_str(0.0259).c, to_str(0.00259).c, to_str(0.000259).c);
+
+    // printf("getting IMU %s, %s, %s, %s\n", to_str(0.259).c, to_str(0.0259).c, to_str(0.00259).c, to_str(0.000259).c);
+    printf("Setting up IMU\n");
+
+    uint8_t conn_state = 0;
+    uint8_t retry_counter = 0;
+    imu.conn_status = 0;
+    double accel_noise = 0;
+    vec3 res;
     
-    calib state = imu.get_calibration();
-    pc.printf("sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
-
-    vec3 res = imu.calibrate_static_error(100);
-    pc.printf("X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
-
-    double accel_noise = imu.get_noise(ERROR_ITER_ACCEL);
-    pc.printf("noise: %s\n", to_str(accel_noise).c);
+    calib state = imu.get_calibration(&conn_state);
+    if (conn_state)
+    {
+        printf("IMU[SUCCESS]: sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
+        while (!imu.conn_status && retry_counter < 5)
+        {
+            res = imu.calibrate_static_error(100);
+            retry_counter += 1;
+        }
+        if (conn_state)
+        {
+            printf("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
+            imu.conn_status = 0;
+            retry_counter = 0;
+        }
+        else
+        {
+            printf("IMU[FAILURE]: failed to get calib; Conn failed\n");
+            printf("IMU[FAILURE]: failed to get noise; Conn failed\n");
+        }
+        // if failed, conn will be set to 1, jump over the next accel noise
+        while (!imu.conn_status && retry_counter < 5)
+        {
+            accel_noise = imu.get_noise(ERROR_ITER_ACCEL);
+            retry_counter += 1;
+        }
+        if (imu.conn_status)
+            printf("IMU[SUCCESS]: noise: %s\n", to_str(accel_noise).c);
+        else
+            printf("IMU[FAILURE]: failed to get noise\n");
+    }
+    else
+        printf("IMU[FAILURE]: No connection, plz check;\n");
 
     // ==================
 

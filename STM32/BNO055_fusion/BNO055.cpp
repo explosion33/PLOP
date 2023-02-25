@@ -12,6 +12,7 @@
 
 #include "mbed.h"
 #include "BNO055.h"
+#include <cstdint>
 
 BNO055::BNO055 (PinName p_sda,
                 PinName p_scl,
@@ -51,23 +52,24 @@ BNO055::BNO055 (I2C& p_i2c, PinName p_reset) :
 }
 
 /////////////// Read data & normalize //////////////////////////////////////////
-void BNO055::get_Euler_Angles(BNO055_EULER_TypeDef *el)
+uint8_t BNO055::get_Euler_Angles(BNO055_EULER_TypeDef *el)
 {
     uint8_t deg_or_rad;
     int16_t h,p,r;
 
     select_page(0);
     dt[0] = BNO055_UNIT_SEL;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    // check if i2c success
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (dt[0] & 0x04) {
         deg_or_rad = 1; // Radian
     } else {
         deg_or_rad = 0; // Degree
     }
     dt[0] = BNO055_EULER_H_LSB;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 6, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 6, false) != 0) return 0;
     h = dt[1] << 8 | dt[0];
     p = dt[3] << 8 | dt[2];
     r = dt[5] << 8 | dt[4];
@@ -80,37 +82,39 @@ void BNO055::get_Euler_Angles(BNO055_EULER_TypeDef *el)
         el->p = (double)p / 16;
         el->r = (double)r / 16;
     }
+    return 1;
 }
 
-void BNO055::get_quaternion(BNO055_QUATERNION_TypeDef *qua)
+uint8_t BNO055::get_quaternion(BNO055_QUATERNION_TypeDef *qua)
 {
     select_page(0);
     dt[0] = BNO055_QUATERNION_W_LSB;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 8, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 8, false) != 0) return 0;
     qua->w = dt[1] << 8 | dt[0];
     qua->x = dt[3] << 8 | dt[2];
     qua->y = dt[5] << 8 | dt[4];
     qua->z = dt[7] << 8 | dt[6];
+    return 1;
 }
 
-void BNO055::get_linear_accel(BNO055_LIN_ACC_TypeDef *la)
+uint8_t BNO055::get_linear_accel(BNO055_LIN_ACC_TypeDef *la)
 {
     uint8_t ms2_or_mg;
     int16_t x,y,z;
 
     select_page(0);
     dt[0] = BNO055_UNIT_SEL;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (dt[0] & 0x01) {
         ms2_or_mg = 1; // mg
     } else {
         ms2_or_mg = 0; // m/s*s
     }
     dt[0] = BNO055_LINEAR_ACC_X_LSB;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 6, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 6, false) != 0) return 0;
     x = dt[1] << 8 | dt[0];
     y = dt[3] << 8 | dt[2];
     z = dt[5] << 8 | dt[4];
@@ -123,25 +127,26 @@ void BNO055::get_linear_accel(BNO055_LIN_ACC_TypeDef *la)
         la->y = (double)y / 100;
         la->z = (double)z / 100;
     }
+    return 1;
 }
 
-void BNO055::get_gravity(BNO055_GRAVITY_TypeDef *gr)
+uint8_t BNO055::get_gravity(BNO055_GRAVITY_TypeDef *gr)
 {
     uint8_t ms2_or_mg;
     int16_t x,y,z;
 
     select_page(0);
     dt[0] = BNO055_UNIT_SEL;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (dt[0] & 0x01) {
         ms2_or_mg = 1; // mg
     } else {
         ms2_or_mg = 0; // m/s*s
     }
     dt[0] = BNO055_GRAVITY_X_LSB;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 6, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 6, false) != 0) return 0;
     x = dt[1] << 8 | dt[0];
     y = dt[3] << 8 | dt[2];
     z = dt[5] << 8 | dt[4];
@@ -154,16 +159,17 @@ void BNO055::get_gravity(BNO055_GRAVITY_TypeDef *gr)
         gr->y = (double)y / 100;
         gr->z = (double)z / 100;
     }
+    return 1;
 }
 
-void BNO055::get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp)
+uint8_t BNO055::get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp)
 {
     uint8_t c_or_f;
 
     select_page(0);
     dt[0] = BNO055_UNIT_SEL;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (dt[0] & 0x10) {
         c_or_f = 1; // Fahrenheit
     } else {
@@ -171,11 +177,11 @@ void BNO055::get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp)
     }
     dt[0] = BNO055_TEMP_SOURCE;
     dt[1] = 0;
-    _i2c.write(chip_addr, dt, 2, false);
+    if (_i2c.write(chip_addr, dt, 2, false) != 0) return 0;
     ThisThread::sleep_for(1ms); // Do I need to wait?
     dt[0] = BNO055_TEMP;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (c_or_f) {
         tmp->acc_chip = (int8_t)dt[0] * 2;
     } else {
@@ -183,16 +189,17 @@ void BNO055::get_chip_temperature(BNO055_TEMPERATURE_TypeDef *tmp)
     }
     dt[0] = BNO055_TEMP_SOURCE;
     dt[1] = 1;
-    _i2c.write(chip_addr, dt, 2, false);
+    if (_i2c.write(chip_addr, dt, 2, false) != 0) return 0;
     ThisThread::sleep_for(1ms); // Do I need to wait?
     dt[0] = BNO055_TEMP;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    if (_i2c.write(chip_addr, dt, 1, true) != 0) return 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0) return 0;
     if (c_or_f) {
         tmp->gyr_chip = (int8_t)dt[0] * 2;
     } else {
         tmp->gyr_chip = (int8_t)dt[0];
     }
+    return 1;
 }
 
 /////////////// Initialize /////////////////////////////////////////////////////
@@ -302,7 +309,7 @@ void BNO055::check_id(void)
     sw_rev_id = dt[6];
 }
 
-void BNO055::read_id_inf(BNO055_ID_INF_TypeDef *id)
+uint8_t BNO055::read_id_inf(BNO055_ID_INF_TypeDef *id)
 {
     id->chip_id = chip_id;
     id->acc_id = acc_id;
@@ -310,6 +317,7 @@ void BNO055::read_id_inf(BNO055_ID_INF_TypeDef *id)
     id->gyr_id = gyr_id;
     id->bootldr_rev_id = bootldr_rev_id;
     id->sw_rev_id = sw_rev_id;
+    return 0;
 }
 
 /////////////// Check chip ready or not  ///////////////////////////////////////
@@ -322,17 +330,20 @@ uint8_t BNO055::chip_ready(void)
 }
 
 /////////////// Read Calibration status  ///////////////////////////////////////
-uint8_t BNO055::read_calib_status(void)
+uint8_t BNO055::read_calib_status(uint8_t* conn_state)
 {
     select_page(0);
     dt[0] = BNO055_CALIB_STAT;
-    _i2c.write(chip_addr, dt, 1, true);
-    _i2c.read(chip_addr, dt, 1, false);
+    *conn_state = 1;
+    if (_i2c.write(chip_addr, dt, 1, true) != 0)
+        *conn_state = 0;
+    if (_i2c.read(chip_addr, dt, 1, false) != 0)
+        *conn_state = 0;
     return dt[0];
 }
 
 /////////////// Change Fusion mode  ////////////////////////////////////////////
-void BNO055::change_fusion_mode(uint8_t mode)
+uint8_t BNO055::change_fusion_mode(uint8_t mode)
 {
     uint8_t current_mode;
 
@@ -342,7 +353,7 @@ void BNO055::change_fusion_mode(uint8_t mode)
         case CONFIGMODE:
             dt[0] = BNO055_OPR_MODE;
             dt[1] = mode;
-            _i2c.write(chip_addr, dt, 2, false);
+            if (_i2c.write(chip_addr, dt, 2, false) != 0) return 0;
             ThisThread::sleep_for(19ms);    // wait 19mS
             break;
         case MODE_IMU:
@@ -354,17 +365,18 @@ void BNO055::change_fusion_mode(uint8_t mode)
             if (current_mode != CONFIGMODE) {
                 dt[0] = BNO055_OPR_MODE;
                 dt[1] = CONFIGMODE;
-                _i2c.write(chip_addr, dt, 2, false);
+                if (_i2c.write(chip_addr, dt, 2, false) != 0) return 0;
                 ThisThread::sleep_for(19ms);    // wait 19mS
             }
             dt[0] = BNO055_OPR_MODE;
             dt[1] = mode;
-            _i2c.write(chip_addr, dt, 2, false);
+            if (_i2c.write(chip_addr, dt, 2, false) != 0) return 0;
             ThisThread::sleep_for(7ms);    // wait 7mS
             break;
         default:
             break;
     }
+    return 1;
 }
 
 uint8_t BNO055::check_operating_mode(void)
@@ -377,7 +389,7 @@ uint8_t BNO055::check_operating_mode(void)
 }
 
 /////////////// Set Mouting position  //////////////////////////////////////////
-void BNO055::set_mounting_position(uint8_t position)
+uint8_t BNO055::set_mounting_position(uint8_t position)
 {
     uint8_t remap_config;
     uint8_t remap_sign;
@@ -423,8 +435,8 @@ void BNO055::set_mounting_position(uint8_t position)
     dt[0] = BNO055_AXIS_MAP_CONFIG;
     dt[1] = remap_config;
     dt[2] = remap_sign;
-    _i2c.write(chip_addr, dt, 3, false);
-    change_fusion_mode(current_mode);
+    if (_i2c.write(chip_addr, dt, 3, false) != 0) return 0;
+    return change_fusion_mode(current_mode);
 }
 
 /////////////// I2C Freq. //////////////////////////////////////////////////////
