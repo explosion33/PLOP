@@ -56,6 +56,8 @@ public:
     
     /** Horizontal dilusion of precision (call sample() to set) */
     float hdop;
+    float pdop;
+    float vdop;
     
     /** The altitude (call sample() to set)
      *  Note that the accurate altitude is corrected by the geoid

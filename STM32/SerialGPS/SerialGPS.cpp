@@ -22,6 +22,7 @@
  */
  
 #include "SerialGPS.h"
+#include <cstdio>
 
 SerialGPS::SerialGPS(PinName tx, PinName rx, int Baud) : _gps(tx, rx, Baud) {    
     longitude = 0.0;
@@ -32,11 +33,15 @@ int SerialGPS::sample() {
     char ns, ew, unit;
     int lock;
 
+    int di;
+    char dc;
+    float df;
+
     while(1) {        
         getline();
 
         // Check if it is a GPGGA msg (matches both locked and non-locked msg)
-        if(sscanf(msg, "GPGGA,%f,%f,%c,%f,%c,%d,%d,%f,%f,%c,%f", &time, &latitude, &ns, &longitude, &ew, &lock, &sats, &hdop, &alt, &unit, &geoid) >= 1) { 
+        if (sscanf(msg, "GPGGA,%f,%f,%c,%f,%c,%d,%d,%f,%f,%c,%f", &time, &latitude, &ns, &longitude, &ew, &lock, &sats, &hdop, &alt, &unit, &geoid) >= 1) { 
             if(!lock) {
                 time = 0.0;
                 longitude = 0.0;
@@ -63,6 +68,13 @@ int SerialGPS::sample() {
                 return 1;
             }
         }
+
+        //$GPGSA,A,3,01,11,07,18,30,193,22,08,28,03,,,1.32,1.00,0.87*3A
+        else if (scanf(msg, "GPGSA,%c,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f", &dc, &di,
+                    &di, &di, &di, &di, &di, &di, &di, &di, &di, &di, &di, &di,
+                    &df, &pdop, &hdop, &vdop) >= 1) {
+
+        }
     }
 }
 
@@ -78,10 +90,23 @@ float SerialGPS::trunc(float v) {
 }
 
 void SerialGPS::getline() {
+    char c;
+
+    while (true) {
+        size_t res = _gps.read(&c, 1);
+        if (res >= 0 && c == '$')
+            break;
+    }
+
     //while(_gps.getc() != '$');    // wait for the start of a line
 
     for(int i=0; i<256; i++) {
-      //  msg[i] = _gps.getc();
+        size_t res = _gps.read(&c, 1);
+        if (res < 0)
+            continue;
+
+        msg[i] = c;
+        
         if(msg[i] == '\r') {
             msg[i] = 0;
             return;
