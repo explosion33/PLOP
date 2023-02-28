@@ -5,107 +5,45 @@
 #include <cstdio>
 #include "KalmanFilter.h"
 #include "SerialGPS.h"
-
-#define ERROR_ITER_ACCEL 200
-#define ERROR_ITER_BARO 200
-
-#define ACCEL_WEIGHT    1.0
-#define BARO_WEIGHT     60.0
-#define BARO_VEL_WEIGHT 200.0
-
-#define INITIAL_ALT 48.0
-
 #include <USBSerial.h>
+
+#define USB_TX_PIN          USBTX
+#define USB_RX_PIN          USBRX
+
+#define ERROR_ITER_ACCEL    200
+#define ERROR_ITER_BARO     200
+
+#define ACCEL_WEIGHT        1.0
+#define BARO_WEIGHT         60.0
+#define BARO_VEL_WEIGHT     200.0
+
+#define INITIAL_ALT         48.0 //replace eventually
+
+
+
 
 USBSerial pc(false);
 DigitalOut led(LED1);
 
-/*BufferedSerial serial(USBTX, USBRX, 115200);
-SerialStream<BufferedSerial> pc(serial);*/
 
 
 I2C i2c(PB_7, PB_6); //I2C-1  // SDA, SCL
 I2C i2c2(PB_3, PB_10); // I2C-2  // SDA, SCL
 IMU imu(i2c);
 Baro baro(&i2c2);
-
 //SerialGPS gps(PA_2, PA_3, 9600);
 
-// sync Kalman Filter
-/*
-int main() {
 
-    // ================== CONFIG IMU ==================
-    pc.printf("getting IMU %s, %s, %s, %s\n", to_str(0.259).c, to_str(0.0259).c, to_str(0.00259).c, to_str(0.000259).c);
-    
-    calib state = imu.get_calibration();
-    pc.printf("sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
-
-    vec3 res = imu.calibrate_static_error(100);
-    pc.printf("X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
-
-    double accel_noise = imu.get_noise(ERROR_ITER_ACCEL);
-    pc.printf("noise: %s\n", to_str(accel_noise).c);
-
-    // ==================
-
-    // ================== CONFIG BARO ==================
-
-    pc.printf("configuring baromter\n");
-    baro.configure(INITIAL_ALT, 150);
-
-    pc.printf("getting noise\n");
-    double baro_noise = baro.get_noise(ERROR_ITER_BARO);
-
-    pc.printf("noise: %s\n", to_str(baro_noise).c);
-
-    // ==================
-
-    // ================== CONFIG FILTER ==================
-        KalmanFilter filter(
-            INITIAL_ALT,
-            accel_noise*ACCEL_WEIGHT,
-            baro_noise*BARO_WEIGHT,
-            BARO_VEL_WEIGHT*(baro_noise*baro_noise),
-            1.0
-        );
-
-
-    // ==================   
-
-    while (true) {
-        filter.tick(&imu, &baro);
-
-        auto alt = filter.altitude();
-        auto vel = filter.velocity();
-        pc.printf("alt: %s, %s | vel: %s, %s | z: %s balt: %s, dt: %s\n",
-            to_str(alt.val).c, to_str(alt.var).c,
-            to_str(vel.val).c, to_str(vel.var).c,
-            to_str(filter.last_acc).c, to_str(filter.last_baro).c, to_str(filter.last_dt()).c
-        );
-
-        ThisThread::sleep_for(20ms);
-    } 
-    
-    
-
-
-
-}
-*/
-// setup the serial from here
-// Specify different pins to test printing on UART other than the console UART.
-#define TARGET_TX_PIN                                                     USBTX
-#define TARGET_RX_PIN                                                     USBRX
 
 // Create a BufferedSerial object to be used by the system I/O retarget code.
-static BufferedSerial serial_port(TARGET_TX_PIN, TARGET_RX_PIN, 9600);
+static BufferedSerial serial_port(USB_TX_PIN, USB_RX_PIN, 9600);
 
 FileHandle *mbed::mbed_override_console(int fd)
 {
     return &serial_port;
 }
 // end of serial setup
+
 
 // async Kalman Filter
 void blink() {
@@ -120,7 +58,9 @@ int main() {
     Thread t;
     t.start(blink);
 
-    printf(
+    ThisThread::sleep_for(10s); // allow time to open console before printing major information
+
+    pc.printf(
         "PLOP Onboard Mbed OS version %d.%d.%d\n",
         MBED_MAJOR_VERSION,
         MBED_MINOR_VERSION,
@@ -128,8 +68,7 @@ int main() {
     );
     // ================== CONFIG IMU ==================
 
-    // printf("getting IMU %s, %s, %s, %s\n", to_str(0.259).c, to_str(0.0259).c, to_str(0.00259).c, to_str(0.000259).c);
-    printf("Setting up IMU\n");
+    pc.printf("Setting up IMU\n");
 
     uint8_t conn_state = 0;
     uint8_t retry_counter = 0;
@@ -140,7 +79,7 @@ int main() {
     calib state = imu.get_calibration(&conn_state);
     if (conn_state)
     {
-        printf("IMU[SUCCESS]: sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
+        pc.printf("IMU[SUCCESS]: sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
         while (!imu.conn_status && retry_counter < 5)
         {
             res = imu.calibrate_static_error(100);
@@ -148,14 +87,14 @@ int main() {
         }
         if (conn_state)
         {
-            printf("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
+            pc.printf("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
             imu.conn_status = 0;
             retry_counter = 0;
         }
         else
         {
-            printf("IMU[FAILURE]: failed to get calib; Conn failed\n");
-            printf("IMU[FAILURE]: failed to get noise; Conn failed\n");
+            pc.printf("IMU[FAILURE]: failed to get calib; Conn failed\n");
+            pc.printf("IMU[FAILURE]: failed to get noise; Conn failed\n");
         }
         // if failed, conn will be set to 1, jump over the next accel noise
         while (!imu.conn_status && retry_counter < 5)
@@ -164,12 +103,12 @@ int main() {
             retry_counter += 1;
         }
         if (imu.conn_status)
-            printf("IMU[SUCCESS]: noise: %s\n", to_str(accel_noise).c);
+            pc.printf("IMU[SUCCESS]: noise: %s\n", to_str(accel_noise).c);
         else
-            printf("IMU[FAILURE]: failed to get noise\n");
+            pc.printf("IMU[FAILURE]: failed to get noise\n");
     }
     else
-        printf("IMU[FAILURE]: No connection, plz check;\n");
+        pc.printf("IMU[FAILURE]: No connection, plz check;\n");
 
     // ==================
 
@@ -205,10 +144,10 @@ int main() {
         pc.printf("alt: %s, %s | vel: %s, %s | z: %s balt: %s, dt: %s\n",
             to_str(alt.val).c, to_str(alt.var).c,
             to_str(vel.val).c, to_str(vel.var).c,
-            to_str(filter.last_acc).c, to_str(filter.last_baro).c, to_str(filter.last_dt()).c
+            to_str(filter.last_acc()).c, to_str(filter.last_baro_alt()).c, to_str(filter.last_dt()).c
         );
 
-        ThisThread::sleep_for(10ms);
+        //ThisThread::sleep_for(10ms);
     }
 }
 

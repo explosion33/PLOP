@@ -17,71 +17,34 @@ void Filter::predict(double _val, double _var) {
 }
 
 
-KalmanFilter::KalmanFilter(double alt, double accel_weight, double baro_weight, double baro_vel_weight, double gps_weight)
-    : vel(0.0, 0.0), alt(alt, 0.0) {
+KalmanFilter::KalmanFilter(double alt, double accel_weight, double baro_weight, double baro_vel_weight, double gps_weight) : 
 
-        this->complete = false;
-        this->last_baro_alt = alt;
+    async_data {
+        false,
+        
+        Filter(alt, 0.0),
+        Filter(0.0, 0.0),
 
-        this->ACCEL_WEIGHT = accel_weight;
-        this->BARO_WEIGHT = baro_weight;
-        this->BARO_VEL_WEIGHT = baro_vel_weight;
-        this->GPS_WEIGHT = gps_weight;
+        nullptr,
+        nullptr,
 
-        for (int i = 0; i<BARO_ROLLING_AVERAGE; i++) {
-            this->baros[i] = 0.0;
-        }
+        accel_weight,
+        baro_weight,
+        baro_vel_weight,
+        gps_weight,
 
-        t.start();
-}
+        0,
+        alt,
+        0,
 
-double KalmanFilter::tick_accel(IMU* imu) {
-
-    double res = imu->accel().z;
-    this->last_acc = res;
-    return res;
-}
-
-double KalmanFilter::tick_baro(Baro* baro) {
-    double res = 0.0;
-
-    auto at = baro->get_alt();
-    if (at.has) {
-        for (int i = 1; i<BARO_ROLLING_AVERAGE; i++) {
-            this->baros[i] = this->baros[i-1];
-            res += this->baros[i];
-        }
-        this->baros[0] = at.val;
-        res += at.val;
-    }
-    else {
-        for (int i = 0; i<BARO_ROLLING_AVERAGE; i++) {
-            res += this->baros[i];
-        }
+        false,
+        alt,
+        Timer(),
     }
 
-    res /= (double)(BARO_ROLLING_AVERAGE);
-    
-    this->last_baro = res;
-    return res;
+{}
 
-}
-
-void KalmanFilter::tick(IMU* imu, Baro* baro) {
-    this->dt = this->t.elapsed_time().count() / 1000000.0; // us to s
-    this->t.reset();
-
-    double acc = this->tick_accel(imu);
-    this->alt.predict(this->vel.val*dt + 0.5*acc*(dt*dt), (this->ACCEL_WEIGHT * dt) + this->vel.var*dt);
-    this->vel.predict(acc*dt, this->ACCEL_WEIGHT*dt);
-
-    double balt = this->tick_baro(baro);
-    this->alt.update(balt, this->BARO_WEIGHT*dt);
-    this->vel.update((balt - this->last_baro_alt)*dt, this->BARO_VEL_WEIGHT*dt);
-    this->last_baro_alt = balt;
-}
-
-void do_accel_async(async* data) {
+void do_accel_async(filterData* data) {
     Timer t;
     t.start();
     while (data->running) {
@@ -89,14 +52,17 @@ void do_accel_async(async* data) {
         t.reset();
 
         double acc = data->imu->accel().z;
-        data->alt->predict(data->vel->val*dt + 0.5*acc*(dt*dt), (data->ACCEL_WEIGHT * dt) + data->vel->var*dt);
-        data->vel->predict(acc*dt, data->ACCEL_WEIGHT*dt);
+        data->alt.predict(data->vel.val*dt + 0.5*acc*(dt*dt), (data->ACCEL_WEIGHT * dt) + data->vel.var*dt);
+        data->vel.predict(acc*dt, data->ACCEL_WEIGHT*dt);
 
-        *data->last_acc = acc;
+        data->last_acc = acc;
+        data->last_dt = dt;
+
+        ThisThread::sleep_for(10ms);
     }
 }
 
-void do_baro_async(async* data) {
+void do_baro_async(filterData* data) {
     double baros[BARO_ROLLING_AVERAGE] = {0};
     double last_baro_alt = 0;
 
@@ -125,57 +91,53 @@ void do_baro_async(async* data) {
 
         res /= (double)(BARO_ROLLING_AVERAGE);
         
-        data->alt->update(res, data->BARO_WEIGHT*dt);
-        data->vel->update((res - last_baro_alt)*dt, data->BARO_VEL_WEIGHT*dt);
+        data->alt.update(res, data->BARO_WEIGHT*dt);
+        data->vel.update((res - last_baro_alt)*dt, data->BARO_VEL_WEIGHT*dt);
         last_baro_alt = res;
 
-        *data->last_baro = res;
+        data->last_baro = res;
     }
 }
 
 void KalmanFilter::start_async(IMU* imu, Baro* baro) {
-    this->running = true;
-    
-    this->adata = {
-        &this->alt,
-        &this->vel,
-        imu,
-        baro,
-        &this->running,
-        this->ACCEL_WEIGHT,
-        this->BARO_WEIGHT,
-        this->BARO_VEL_WEIGHT,
-        this->GPS_WEIGHT,
-        &this->last_acc,
-        &this->last_baro,
-    };
+    this->async_data.running = true;
+    this->async_data.imu = imu;
+    this->async_data.baro = baro;
 
-    t1.start(callback(do_accel_async, &adata));
-    t2.start(callback(do_baro_async, &adata));
+    thread_imu.start(callback(do_accel_async, &this->async_data));
+    thread_baro.start(callback(do_baro_async, &this->async_data));
 }
 
 void KalmanFilter::stop_async() {
-    this->running = false;
-    t1.terminate();
-    t2.terminate();
-    t1.join();
-    t2.join();
+    this->async_data.running = false;
+    thread_imu.terminate();
+    thread_baro.terminate();
+    thread_imu.join();
+    thread_baro.join();
 }
 
 data KalmanFilter::altitude() {
     data res;
-    res.val = this->alt.val;
-    res.var = this->alt.var;
+    res.val = this->async_data.alt.val;
+    res.var = this->async_data.alt.var;
     return res;
 }
 
 data KalmanFilter::velocity() {
     data res;
-    res.val = this->vel.val;
-    res.var = this->vel.var;
+    res.val = this->async_data.vel.val;
+    res.var = this->async_data.vel.var;
     return res;
 }
 
+double KalmanFilter::last_acc() {
+    return this->async_data.last_acc;
+}
+
+double KalmanFilter::last_baro_alt() {
+    return this->async_data.last_baro;
+}
+
 double KalmanFilter::last_dt() {
-    return dt;
+    return this->async_data.last_dt;
 }
