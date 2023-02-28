@@ -37,8 +37,11 @@ struct filterData {
     double last_baro;
     double last_dt;
 
+    // high dv baro + IMU desync fix
     bool has_new_baro;
     double curr_baro;
+    double baro_vel;
+    double baro_dt;
     Timer syncTimer;
 };
 
