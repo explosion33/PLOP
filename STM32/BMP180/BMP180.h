@@ -123,23 +123,23 @@ public:
     /**
      * @brief   Initialize BMP180.
      * @details Gets the device ID and saves the calibration values.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int init(void);
+    uint8_t init(void);
 
     /**
      * @brief   Reset BMP180.
      * @details Performs a soft reset of the device. Same sequence as power on reset.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int reset(void);
+    uint8_t reset(void);
 
     /**
      * @brief   Check ID.
      * @details Checks the device ID, should be 0x55 on reset.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int checkId(void);
+    uint8_t checkId(void);
 
     /**
      * @brief   Start pressure conversion.
@@ -147,9 +147,9 @@ public:
      *          for timing specifications.
      *
      * @param   oss Number of samples to take.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int startPressure(BMP180::oversampling_t oss);
+    uint8_t startPressure(BMP180::oversampling_t oss);
 
     /**
      * @brief   Get pressure reading.
@@ -160,17 +160,17 @@ public:
      *          function too soon can result in oversampling.
      *
      * @param   pressure Pointer to store pressure reading.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int getPressure(int *pressure);
+    uint8_t getPressure(int *pressure);
 
     /**
      * @brief   Start temperature conversion.
      * @details Initiates the temperature conversion sequence. Refer to data
      *          sheet for timing specifications.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int startTemperature(void);
+    uint8_t startTemperature(void);
 
     /**
      * @brief   Get temperature reading.
@@ -182,9 +182,9 @@ public:
      *          function too soon can result in oversampling.
      *
      * @param   tempC Pointer to store temperature reading.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int getTemperature(float *tempC);
+    uint8_t getTemperature(float *tempC);
 
     /**
      * @brief   Get temperature reading.
@@ -196,9 +196,9 @@ public:
      *          function too soon can result in oversampling.
      *
      * @param   tempCx10 Pointer to store temperature reading.
-     * @returns 0 if no errors, -1 if error.
+     * @returns 1 if no errors, 0 if error.
      */
-    int getTemperature(int16_t *tempCx10);
+    uint8_t getTemperature(int16_t *tempCx10);
 
 private:
 

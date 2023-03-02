@@ -107,14 +107,14 @@ void do_baro_async(filterData* data) {
         double res = 0.0;
 
         // get alt and run the average
-        auto at = data->baro->get_alt();
-        if (at.has) {
+        double at = data->baro->get_alt();
+        if (data->baro->conn_status) {
             for (int i = 1; i<BARO_ROLLING_AVERAGE; i++) {
                 baros[i] = baros[i-1];
                 res += baros[i];
             }
-            baros[0] = at.val;
-            res += at.val;
+            baros[0] = at;
+            res += at;
         }
         else {
             for (int i = 0; i<BARO_ROLLING_AVERAGE; i++) {

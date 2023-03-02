@@ -6,10 +6,14 @@
 
 IMU::IMU(I2C& i2c, PinName p_reset) : sensor(i2c, p_reset) {
     this->has_reset_pin = true;
+    init_status = IMU_ERROR;
+    conn_status = 0;
 }
 
 IMU::IMU(I2C& i2c) : sensor(i2c, PA_0){
     this->has_reset_pin = false;
+    init_status = IMU_ERROR;
+    conn_status = 0;
 }
 
 vec3 IMU::euler() {

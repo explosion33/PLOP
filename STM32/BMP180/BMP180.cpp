@@ -73,74 +73,74 @@ BMP180::~BMP180()
 }
 
 //******************************************************************************
-int BMP180::init(void)
+uint8_t BMP180::init(void)
 {
     char addr;
     char data[22];
     int i;
 
-    if (checkId() != 0) {
-        return -1;
+    if (checkId()) {
+        return 0;
     }
 
     addr = REG_ADDR_AC1;
     if (i2c_->write(I2C_ADDR, &addr, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (i2c_->read(I2C_ADDR, data, 22) != 0) {
-        return -1;
+        return 0;
     }
 
     for (i = 0; i < 11; i++) {
         calib.value[i] = (data[2*i] << 8) | data[(2*i)+1];
     }
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::reset(void)
+uint8_t BMP180::reset(void)
 {
     char data;
 
     data = REG_ADDR_RESET;
     if (i2c_->write(I2C_ADDR, &data, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     data = 0xB6;
     if (i2c_->write(I2C_ADDR, &data, 1) != 0) {
-        return -1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::checkId(void)
+uint8_t BMP180::checkId(void)
 {
     char addr;
     char data;
 
     addr = REG_ADDR_ID;
     if (i2c_->write(I2C_ADDR, &addr, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (i2c_->read(I2C_ADDR, &data, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (data != 0x55) {
-        return -1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::startPressure(BMP180::oversampling_t oss)
+uint8_t BMP180::startPressure(BMP180::oversampling_t oss)
 {
     char data[2];
 
@@ -149,14 +149,14 @@ int BMP180::startPressure(BMP180::oversampling_t oss)
     oss_ = oss;
 
     if (i2c_->write(I2C_ADDR, data, 2) != 0) {
-        return -1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::getPressure(int *pressure)
+uint8_t BMP180::getPressure(int *pressure)
 {
     char addr, byte[3];
     uint32_t up;
@@ -165,11 +165,11 @@ int BMP180::getPressure(int *pressure)
 
     addr = REG_ADDR_DATA;
     if (i2c_->write(I2C_ADDR, &addr, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (i2c_->read(I2C_ADDR, byte, 3) != 0) {
-        return -1;
+        return 0;
     }
 
     up = ((byte[0] << 16) | (byte[1] << 8) | byte[2]) >> (8 - oss_);
@@ -198,23 +198,23 @@ int BMP180::getPressure(int *pressure)
 
     *pressure = p;
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::startTemperature(void)
+uint8_t BMP180::startTemperature(void)
 {
     char data[2] = { REG_ADDR_CTRL, CTRL_REG_TEMP };
 
     if (i2c_->write(I2C_ADDR, data, 2) != 0) {
-        return -1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::getTemperature(float *tempC)
+uint8_t BMP180::getTemperature(float *tempC)
 {
     char addr, byte[2];
     uint16_t ut;
@@ -222,11 +222,11 @@ int BMP180::getTemperature(float *tempC)
 
     addr = REG_ADDR_DATA;
     if (i2c_->write(I2C_ADDR, &addr, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (i2c_->read(I2C_ADDR, byte, 2) != 0) {
-        return -1;
+        return 0;
     }
 
     ut = (byte[0] << 8) | byte[1];
@@ -237,11 +237,11 @@ int BMP180::getTemperature(float *tempC)
 
     *tempC = (float)(b5 + 8) / 160;
 
-    return 0;
+    return 1;
 }
 
 //******************************************************************************
-int BMP180::getTemperature(int16_t *tempCx10)
+uint8_t BMP180::getTemperature(int16_t *tempCx10)
 {
     char addr, byte[2];
     uint16_t ut;
@@ -249,11 +249,11 @@ int BMP180::getTemperature(int16_t *tempCx10)
 
     addr = REG_ADDR_DATA;
     if (i2c_->write(I2C_ADDR, &addr, 1) != 0) {
-        return -1;
+        return 0;
     }
 
     if (i2c_->read(I2C_ADDR, byte, 2) != 0) {
-        return -1;
+        return 0;
     }
 
     ut = (byte[0] << 8) | byte[1];
@@ -264,5 +264,5 @@ int BMP180::getTemperature(int16_t *tempCx10)
 
     *tempCx10 = (b5 + 8) >> 4;
 
-    return 0;
+    return 1;
 }
