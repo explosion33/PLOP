@@ -68,7 +68,7 @@ int main() {
     );
     // ================== CONFIG IMU ==================
 
-    CONSOLE("Setting up IMU\n");
+    CONSOLE("IMU[INFO]: Setting up IMU\n");
 
     uint8_t conn_state = 0;
     uint8_t retry_counter = 0;
@@ -190,6 +190,12 @@ int main() {
         );
 
         //ThisThread::sleep_for(10ms);
+    }
+
+    while (true)
+    {
+        // keep main thread running;
+        // you should never reach here when system running normal
     }
 }
 
