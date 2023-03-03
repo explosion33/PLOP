@@ -6,6 +6,7 @@
 #include "KalmanFilter.h"
 #include "SerialGPS.h"
 #include <USBSerial.h>
+#include "Radio.h"
 
 #define USB_TX_PIN          USBTX
 #define USB_RX_PIN          USBRX
@@ -49,11 +50,11 @@ Baro baro(&i2c2);
 void blink() {
     while (true) {
         led = !led;
-        ThisThread::sleep_for(50ms);
+        ThisThread::sleep_for(500ms);
     }
 }
 
-
+/*
 int main() {
     Thread t;
     t.start(blink);
@@ -197,8 +198,25 @@ int main() {
         // keep main thread running;
         // you should never reach here when system running normal
     }
-}
+}*/
 
+int main() {
+    Thread t;
+    t.start(blink);
+
+    Radio radio(&pc);
+    radio.init();
+    radio.setup_443();
+
+    radio.set_debug(true);
+
+    size_t i = 0;
+    while (true) {
+        radio.transmit("test msg", 9);
+        pc.printf("sent message\n");
+        ThisThread::sleep_for(1s);
+    }
+}
 
 
 // IMU accel test
