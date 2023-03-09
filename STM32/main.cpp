@@ -43,7 +43,7 @@ I2C i2c(PB_7, PB_6); //I2C-1  // SDA, SCL
 I2C i2c2(PB_3, PB_10); // I2C-2  // SDA, SCL
 IMU imu(i2c);
 Baro baro(&i2c2);
-//SerialGPS gps(PA_2, PA_3, 9600);
+SerialGPS gps(PA_2, PA_3, 9600);
 
 
 // async Kalman Filter
@@ -200,6 +200,8 @@ int main() {
     }
 }*/
 
+//RADIO TEST
+/*
 int main() {
     Thread t;
     t.start(blink);
@@ -217,6 +219,7 @@ int main() {
         ThisThread::sleep_for(1s);
     }
 }
+*/
 
 
 // IMU accel test
@@ -251,39 +254,44 @@ int main() {
 
 
 // GPS TEST
-/*
+
+int printd() {
+    while (true) {
+        CONSOLE(".");
+        ThisThread::sleep_for(50ms);
+    }
+}
+
 int main() {
+    Thread b;
+    b.start(printd);
+
     Timer t;
     t.start();
     CONSOLE("starting gps\n");
     while (true) {
         t.reset();
         switch (gps.sample()) {
-            case Error: {
-                CONSOLE("error\n");
+            case 0: {
+                //CONSOLE("%s", gps.msg);
+                continue;
+            }
+
+            case 1: {
+                CONSOLE("\nGGA: lat: %s, lon: %s, alt: %s", to_str(gps.latitude).c, to_str(gps.longitude).c, to_str(gps.alt).c);
                 break;
             }
 
-            case GGA: {
-                CONSOLE("GGA: lat: %s, lon: %s, alt: %s\n", to_str(gps.latitude).c, to_str(gps.longitude).c, to_str(gps.alt).c);
-                break;
-            }
-
-            case RMC: {
-                CONSOLE("TMC: lat: %s, lon: %s, alt: %s, speed: %s, course: %s\n", to_str(gps.latitude).c, to_str(gps.longitude).c, to_str(gps.alt).c, to_str(gps.speed).c, to_str(gps.course).c);
-                break;
-            }
-
-            case GSA: {
-                CONSOLE("GSA: hdop: %s, vdop: %s, pdop: %s\n", to_str(gps.hdop).c, to_str(gps.vdop).c, to_str(gps.pdop).c);
+            case 2: {
+                CONSOLE("GSA: hdop: %s, vdop: %s, pdop: %s", to_str(gps.hdop).c, to_str(gps.vdop).c, to_str(gps.pdop).c);
                 break;
             }
         }
 
         double dt = t.elapsed_time().count() / 1000000.0;
-        CONSOLE("dt: %s ", to_str(dt).c);
+        CONSOLE(" | dt: %s\n", to_str(dt).c);
     }
-}*/
+}
 
 /*int ack;   
 int address;  

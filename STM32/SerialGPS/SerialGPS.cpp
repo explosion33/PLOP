@@ -40,6 +40,7 @@ int SerialGPS::sample() {
     while(1) {        
         getline();
 
+        //$GPGGA,091626.000,2236.2791,N,12017.2818,E,1,10,1.00,8.8,M,18.7,M,,*66
         // Check if it is a GPGGA msg (matches both locked and non-locked msg)
         if (sscanf(msg, "GPGGA,%f,%f,%c,%f,%c,%d,%d,%f,%f,%c,%f", &time, &latitude, &ns, &longitude, &ew, &lock, &sats, &hdop, &alt, &unit, &geoid) >= 1) { 
             if(!lock) {
@@ -50,7 +51,6 @@ int SerialGPS::sample() {
                 hdop = 0.0;
                 alt = 0.0;
                 geoid = 0.0;        
-                return 0;
             } else {
                 //GPGGA format according http://aprs.gids.nl/nmea/#gga
                 // time (float), lat (f), (N/S) (c), long (f), (E/W) (c), fix (d), sats (d),
@@ -69,12 +69,24 @@ int SerialGPS::sample() {
             }
         }
 
+        //$GPGSA,A,3,25,24,12,11,06,29,20,02,28,,,,1.66,0.98,1.34*01
         //$GPGSA,A,3,01,11,07,18,30,193,22,08,28,03,,,1.32,1.00,0.87*3A
-        else if (scanf(msg, "GPGSA,%c,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f", &dc, &di,
-                    &di, &di, &di, &di, &di, &di, &di, &di, &di, &di, &di, &di,
-                    &df, &pdop, &hdop, &vdop) >= 1) {
+        else if (msg[2] == 'G' && msg[3] == 'S' && msg[4] == 'A') {
+            int i;
+            for (i = 0; i<50; i++) {
+                if (msg[i] == '.')
+                    break;
+            }
+            i --;
 
+            if (sscanf(msg+i, "%f, %f, %f", &pdop, &hdop, &vdop) >= 1) {
+                return 2;
+            }            
+            
+            return 0;
         }
+
+        return 0;
     }
 }
 

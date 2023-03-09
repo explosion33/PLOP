@@ -15,7 +15,6 @@
 class Radio{
     
     public:
-
         Radio(Stream* pc);
         ~Radio();
         bool checkExistance();
@@ -51,7 +50,6 @@ class Radio{
         };
 
     private:
-
         Stream * pc;
         CC1200 radio;
         size_t max_msg_size;
