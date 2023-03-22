@@ -43,14 +43,14 @@ I2C i2c(PB_7, PB_6); //I2C-1  // SDA, SCL
 I2C i2c2(PB_3, PB_10); // I2C-2  // SDA, SCL
 IMU imu(i2c);
 Baro baro(&i2c2);
-SerialGPS gps(PA_2, PA_3, 9600);
+//SerialGPS gps(PA_2, PA_3, 9600);
 
 
 // async Kalman Filter
 void blink() {
     while (true) {
         led = !led;
-        ThisThread::sleep_for(500ms);
+        ThisThread::sleep_for(50ms);
     }
 }
 
@@ -176,7 +176,7 @@ int main() {
         1.0
     );
 
-    filter.start_async(&imu, &baro);
+    filter.start_async(&imu, &baro, &gps);
 
     // ==================  
     // if anything not init, filter wont working
@@ -184,10 +184,15 @@ int main() {
 
         auto alt = filter.altitude();
         auto vel = filter.velocity();
-        CONSOLE("alt: %s, %s | vel: %s, %s | z: %s balt: %s, dt: %s\n",
+
+        gpsData d = filter.last_gps();
+
+        CONSOLE("alt: %s, %s | vel: %s, %s | z: %s balt: %s, dt: %s | alt: %s, vdop: %s, time: %s\n",
             to_str(alt.val).c, to_str(alt.var).c,
             to_str(vel.val).c, to_str(vel.var).c,
-            to_str(filter.last_acc()).c, to_str(filter.last_baro_alt()).c, to_str(filter.last_dt()).c
+            to_str(filter.last_acc()).c, to_str(filter.last_baro_alt()).c, to_str(filter.last_dt()).c,
+            to_str(d.alt).c, to_str(d.vdop).c, to_str(d.time).c
+
         );
 
         //ThisThread::sleep_for(10ms);
@@ -195,10 +200,13 @@ int main() {
 
     while (true)
     {
+        CONSOLE("Critical Error| One or More Sensors Missing...\n");
+        ThisThread::sleep_for(1s);
         // keep main thread running;
         // you should never reach here when system running normal
     }
-}*/
+}
+*/
 
 //RADIO TEST
 /*
@@ -255,6 +263,7 @@ int main() {
 
 // GPS TEST
 
+/*
 int printd() {
     while (true) {
         CONSOLE(".");
@@ -292,14 +301,32 @@ int main() {
         CONSOLE(" | dt: %s\n", to_str(dt).c);
     }
 }
+*/
 
-/*int ack;   
+// Baro Test
+
+int main() {
+    Thread t;
+    t.start(blink);
+
+    baro.configure(48, 100);
+
+    while (true) {
+        CONSOLE("alt: %s | pres: %s | temp: %s\n", to_str(baro.get_alt()).c, to_str(baro.get_pressure()).c, to_str(baro.get_temperature()).c);
+        ThisThread::sleep_for(50ms);
+    }
+}
+
+
+// I2C Scan
+/*
+int ack;   
 int address;  
 void scanI2C(I2C* i2c) {
   for(address=1;address<127;address++) {    
     ack = i2c->write(address, "11", 1);
     if (ack == 0) {
-       CONSOLE("\tFound at %3d -- %3x\r\n", address,address);
+       CONSOLE("\tFound at %3d -- 0x%3x\r\n", address,address);
     }    
     ThisThread::sleep_for(50ms);
   } 
@@ -313,6 +340,8 @@ int main() {
 
   CONSOLE("I2C scanner \r\n");
   scanI2C(&i2c);
+  CONSOLE("I2C-2\n");
   scanI2C(&i2c2);
   CONSOLE("Finished Scan\r\n");
-}*/
+}
+*/

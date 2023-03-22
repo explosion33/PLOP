@@ -27,6 +27,7 @@ KalmanFilter::KalmanFilter(double alt, double accel_weight, double baro_weight, 
 
         nullptr,
         nullptr,
+        nullptr,
 
         accel_weight,
         baro_weight,
@@ -142,13 +143,70 @@ void do_baro_async(filterData* data) {
     }
 }
 
-void KalmanFilter::start_async(IMU* imu, Baro* baro) {
+void do_gps_async(filterData* data) {
+    Timer t;
+    t.start();
+    
+    bool GGA = false;
+    bool GSA = false;
+
+    bool has = false;
+    float last_alt = 0.0;
+    float last_err = 0.0;
+
+    while (true) {
+        switch (data->gps->sample()) {
+            case 0: {
+                //CONSOLE("%s", gps.msg);
+                continue;
+            }
+
+            case 1: {
+                GGA = true;
+                break;
+            }
+
+            case 2: {
+                GSA = true;
+                break;
+            }
+        }
+
+        if (GGA && GSA) {
+            double dt = t.elapsed_time().count() / 1000000.0;
+            t.reset();
+
+            GGA = false;
+            GSA = false;
+
+
+            float error = data->gps->vdop * 3.0 * data->GPS_WEIGHT;
+
+            if (has)
+                data->vel.update((data->gps->alt - last_alt) / dt, last_err + error);
+            last_err = error;
+            last_alt = data->gps->alt;
+            has = true;
+
+            data->alt.update(data->gps->alt, error);
+        }
+
+        
+        
+
+
+    }
+}
+
+void KalmanFilter::start_async(IMU* imu, Baro* baro, SerialGPS* gps) {
     this->async_data.running = true;
     this->async_data.imu = imu;
     this->async_data.baro = baro;
+    this->async_data.gps = gps;
 
     thread_imu.start(callback(do_accel_async, &this->async_data));
     thread_baro.start(callback(do_baro_async, &this->async_data));
+    //thread_gps.start(callback(do_gps_async, &this->async_data));
 }
 
 void KalmanFilter::stop_async() {
@@ -183,4 +241,18 @@ double KalmanFilter::last_baro_alt() {
 
 double KalmanFilter::last_dt() {
     return this->async_data.last_dt;
+}
+
+gpsData KalmanFilter::last_gps() {
+    gpsData res = {
+        this->async_data.gps->latitude,
+        this->async_data.gps->longitude,
+        this->async_data.gps->alt,
+        this->async_data.gps->pdop,
+        this->async_data.gps->hdop,
+        this->async_data.gps->vdop,
+        this->async_data.gps->time,
+    };
+
+    return res;
 }

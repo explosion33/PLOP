@@ -1,6 +1,7 @@
 #include "mbed.h"
 #include "BARO.h"
 #include "IMU.h"
+#include "SerialGPS.h"
 
 #define BARO_ROLLING_AVERAGE 100
 
@@ -18,6 +19,12 @@ struct data {
     double val, var;
 };
 
+struct gpsData {
+    float lat, lon, alt;
+    float pdop, hdop, vdop;
+    float time;
+};
+
 
 struct filterData {
     bool running;
@@ -27,6 +34,7 @@ struct filterData {
 
     IMU* imu;
     Baro* baro;
+    SerialGPS* gps;
 
     double ACCEL_WEIGHT;
     double BARO_WEIGHT;
@@ -50,7 +58,7 @@ class KalmanFilter {
 private:
     filterData async_data;
 
-    Thread thread_imu, thread_baro;
+    Thread thread_imu, thread_baro, thread_gps;
 
 public:
     double last_acc();
@@ -58,10 +66,11 @@ public:
 
     KalmanFilter(double alt, double accel_weight, double baro_weight, double baro_vel_weight, double gps_weight);
 
-    void start_async(IMU* imu, Baro* baro);
+    void start_async(IMU* imu, Baro* baro, SerialGPS* gps);
     void stop_async();
 
     data altitude();
     data velocity();
     double last_dt();
+    gpsData last_gps();
 };
