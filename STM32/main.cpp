@@ -43,18 +43,18 @@ I2C i2c(PB_7, PB_6); //I2C-1  // SDA, SCL
 I2C i2c2(PB_3, PB_10); // I2C-2  // SDA, SCL
 IMU imu(i2c);
 Baro baro(&i2c2);
-//SerialGPS gps(PA_2, PA_3, 9600);
+SerialGPS gps(PA_2, PA_3, 9600);
 
 
 // async Kalman Filter
 void blink() {
     while (true) {
         led = !led;
-        ThisThread::sleep_for(50ms);
+        ThisThread::sleep_for(500ms);
     }
 }
 
-/*
+
 int main() {
     Thread t;
     t.start(blink);
@@ -206,7 +206,7 @@ int main() {
         // you should never reach here when system running normal
     }
 }
-*/
+
 
 //RADIO TEST
 /*
@@ -304,19 +304,27 @@ int main() {
 */
 
 // Baro Test
-
+/*
 int main() {
     Thread t;
     t.start(blink);
 
-    baro.configure(48, 100);
+    ThisThread::sleep_for(5s);
+
+    CONSOLE("CONFIG: %d\n", baro.configure(48, 200));
+    CONSOLE("%s | %s\n\n\n", to_str(baro.base_alt).c, to_str(baro.base_pres).c);
 
     while (true) {
-        CONSOLE("alt: %s | pres: %s | temp: %s\n", to_str(baro.get_alt()).c, to_str(baro.get_pressure()).c, to_str(baro.get_temperature()).c);
+        float alt = (float)baro.get_alt();
+        CONSOLE("alt: %s | pres: %s | temp: %s | %d, %d | balt: %s, bpres: %s | %d\n", to_str(alt).c, to_str(baro.get_pressure()).c, to_str(baro.get_temperature()).c,
+        baro.conn_status, baro.init_status,
+        to_str(baro.base_alt).c, to_str(baro.base_pres).c, (int)alt
+        );
         ThisThread::sleep_for(50ms);
     }
 }
 
+*/
 
 // I2C Scan
 /*
@@ -324,7 +332,7 @@ int ack;
 int address;  
 void scanI2C(I2C* i2c) {
   for(address=1;address<127;address++) {    
-    ack = i2c->write(address, "11", 1);
+    ack = i2c->write(address << 1, "11", 1);
     if (ack == 0) {
        CONSOLE("\tFound at %3d -- 0x%3x\r\n", address,address);
     }    

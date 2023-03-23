@@ -1,23 +1,31 @@
 #include "BARO.h"
 #include <cmath>
 
+// from BMP180.cpp
+#define BMP_READ_ERROR 3
+#define BMP_WRITE_ERROR 2
+#define BMP_ERROR 1
+#define BMP_OK 0
+
 Baro::Baro(I2C* i2c) : sensor(i2c) {
-    conn_status = 0;
-    init_status = BARO_ERROR;
-    sensor.reset();
-    sensor.init();
-    this->get_pressure();
+    conn_status = BMP_ERROR;
+    
+    sensor.reset();    
+    init_status = sensor.init();
+    
+    
     this->get_temperature();
+    this->get_pressure();
 }
 
 Baro::Baro(PinName SDA, PinName SCL) : sensor(SDA, SCL) {
-    conn_status = 0;
-    init_status = BARO_ERROR;
-    sensor.reset();
-    sensor.init();
+    conn_status = BMP_ERROR;
     
+    sensor.reset();
+    init_status = sensor.init();
+
+    this->get_temperature();    
     this->get_pressure();
-    this->get_temperature();
 }
 
 int Baro::get_pressure() {
@@ -49,10 +57,10 @@ float Baro::get_temperature() {
 }
 
 double Baro::get_alt() {
-    float P = (float) this->get_pressure();
-    if (!conn_status) return 0;
     double T = this->get_temperature();
-    if (!conn_status) return 0;
+    if (conn_status != BMP_OK) return -1;
+    float P = (float) this->get_pressure();
+    if (conn_status != BMP_OK) return -1;
 
     double alt = this->base_pres / P;
     alt = pow(alt, RATIO1);
@@ -70,21 +78,20 @@ uint8_t Baro::configure(double alt, size_t iter) {
     size_t i = iter;
     while (i > 0) {
         int pt = this->get_pressure();
-        if (conn_status) {
+        if (conn_status == BMP_OK) {
             total += (float) pt;
             i --;
         }
         else
         {
-            return 0;
-            break;
+            //return BMP_ERROR;
         }
-        ThisThread::sleep_for(20ms);
+        ThisThread::sleep_for(50ms);
     }
 
     this->base_alt = alt;
     this->base_pres = total/(float)iter;
-    return 1;
+    return BMP_OK;
 }
 
 uint8_t Baro::get_noise(size_t iter, double* _noise){
@@ -101,7 +108,7 @@ uint8_t Baro::get_noise(size_t iter, double* _noise){
         }
         else
         {
-            return 0;
+            return BMP_ERROR;
             break;
         }
     }
@@ -117,9 +124,9 @@ uint8_t Baro::get_noise(size_t iter, double* _noise){
     stdev /= (float)iter;
     *_noise = sqrt(stdev);
 
-    return 1;
+    return BMP_OK;
 }
 
 bool Baro::isReady() {
-    return sensor.init();
+    return sensor.init() == BMP_OK;
 }

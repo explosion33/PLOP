@@ -5,10 +5,6 @@
 #include "BMP180.h"
 #include "Option.h"
 
-#define BARO_WORKING 2
-#define BARO_CONFIGD 1
-#define BARO_ERROR 0
-
 #define RATIO1 0.19022256
 #define RATIO2 0.0065
 
@@ -30,11 +26,13 @@ public:
     uint8_t conn_status;
     uint8_t init_status; // 0 for failed, 1 for configured, 2 for working
 
+    int base_alt;
+    float base_pres;
+
 private:
     BMP180 sensor;
 
-    int base_alt;
-    float base_pres;
+    
 };
 
 #endif
