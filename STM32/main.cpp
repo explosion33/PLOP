@@ -64,6 +64,12 @@ bool imu_init(double* noise) {
         CONSOLE("IMU[FAILURE]: failed to calibrate static error\n");
         return false;
     }
+
+    if (res.x == 0 && res.y == 0 && res.z == 0) {
+        CONSOLE("IMU[FAILURE]: BNO055 found, but not transmitting data\n");
+        return false;
+    }
+
     CONSOLE("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
     
 
@@ -71,7 +77,11 @@ bool imu_init(double* noise) {
     if (!imu.conn_status) {
         CONSOLE("IMU[FAILURE]: failed to calculate accelerometer noise\n");
         return false;
-        
+    }
+
+    if (*noise == 0) {
+        CONSOLE("IMU[FAILURE]: BNO055 found, but not transmitting data\n");
+        return false;
     }
 
     CONSOLE("IMU[SUCCESS]: noise: %s\n", to_str(*noise).c);
@@ -94,6 +104,12 @@ bool baro_init(double* noise) {
         CONSOLE("BARO[FAILED]: failed to get barometer noise\n");
         return false;
     }
+
+    if (*noise == 0) {
+        CONSOLE("BARO[FAILURE]: BMP180 found, but not transmitting data\n");
+        return false;
+    }
+
     CONSOLE("BARO[SUCCESS]: noise: %s\n", to_str(*noise).c);
     return true;
 }
@@ -122,19 +138,28 @@ int main() {
     );
 
 
+    bool has_IMU  = false;
+    bool has_BARO = false;
+
     double accel_noise = -1;
+    double baro_noise = -1;
+
+
     for (int i = 0; i<SENSOR_INIT_RETRY; i++) {
-        if (imu_init(&accel_noise))
+        if (imu_init(&accel_noise)) {
+            has_IMU = true;
             break;
-        CONSOLE("IMU[FAILUE]: failed to fully initialize IMU. Retrying %d / %d", i+1, SENSOR_INIT_RETRY);
+        }
+        CONSOLE("IMU[FAILUE]: failed to fully initialize IMU. Attempt %d / %d\n", i+1, SENSOR_INIT_RETRY);
     }    
     CONSOLE("\n");
 
-    double baro_noise = -1;
     for (int i = 0; i<SENSOR_INIT_RETRY; i++) {
-        if (baro_init(&baro_noise))
+        if (baro_init(&baro_noise)) {
+            has_BARO = true;
             break;
-        CONSOLE("BARO[FAILUE]: failed to fully initialize Barometer. Retrying %d / %d", i+1, SENSOR_INIT_RETRY);
+        }
+        CONSOLE("BARO[FAILUE]: failed to fully initialize Barometer. Attempt %d / %d\n", i+1, SENSOR_INIT_RETRY);
     }
 
     CONSOLE("\n");
@@ -142,11 +167,11 @@ int main() {
 
     // Report Init Result and Self Check
     CONSOLE("---------------\nSelf Check Report:\n");
-    if (accel_noise != -1)
+    if (has_IMU)
         CONSOLE("IMU     [OK]\n");
     else
         CONSOLE("IMU     [FAIL]\n");
-    if (baro_noise != -1)
+    if (has_BARO)
         CONSOLE("BARO    [OK]\n");
     else
         CONSOLE("BARO    [FAIL]\n");
