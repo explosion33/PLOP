@@ -37,6 +37,11 @@
 #include "mbed.h"
 
 
+#define BMP_READ_ERROR 0
+#define BMP_WRITE_ERROR 0
+#define BMP_ERROR 0
+#define BMP_OK 1
+
 /**
  * Bosch BMP180 Digital Pressure Sensor
  *

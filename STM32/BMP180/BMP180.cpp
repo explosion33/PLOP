@@ -48,11 +48,6 @@
 #define CTRL_REG_PRESS_2    (0xB4)
 #define CTRL_REG_PRESS_3    (0xF4)
 
-#define BMP_READ_ERROR 3
-#define BMP_WRITE_ERROR 2
-#define BMP_ERROR 1
-#define BMP_OK 0
-
 //******************************************************************************
 BMP180::BMP180(PinName sda, PinName scl)
 {
@@ -85,7 +80,7 @@ uint8_t BMP180::init(void)
     int i;
 
     uint8_t res = checkId();
-    if (res != 0) {
+    if (res != BMP_OK) {
         return res;
     }
 

@@ -1,12 +1,6 @@
 #include "BARO.h"
 #include <cmath>
 
-// from BMP180.cpp
-#define BMP_READ_ERROR 3
-#define BMP_WRITE_ERROR 2
-#define BMP_ERROR 1
-#define BMP_OK 0
-
 Baro::Baro(I2C* i2c) : sensor(i2c) {
     conn_status = BMP_ERROR;
     
@@ -84,7 +78,7 @@ uint8_t Baro::configure(double alt, size_t iter) {
         }
         else
         {
-            //return BMP_ERROR;
+            return BMP_ERROR;
         }
         ThisThread::sleep_for(50ms);
     }
@@ -101,7 +95,7 @@ uint8_t Baro::get_noise(size_t iter, double* _noise){
 
     while (i > 0) {
         double temp_alt = this->get_alt();
-        if (conn_status) {
+        if (conn_status == BMP_OK) {
             mean += temp_alt;
             vals[i-1] = temp_alt;
             i--;

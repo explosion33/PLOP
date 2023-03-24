@@ -4,20 +4,21 @@
 #include <cstdint>
 #include <string>
 
+#define IMU_ERROR 0
+#define IMU_OK 1
+
 IMU::IMU(I2C& i2c, PinName p_reset) : sensor(i2c, p_reset) {
     this->has_reset_pin = true;
-    init_status = IMU_ERROR;
-    conn_status = 0;
+    conn_status = IMU_ERROR;
 }
 
 IMU::IMU(I2C& i2c) : sensor(i2c, PA_0){
     this->has_reset_pin = false;
-    init_status = IMU_ERROR;
-    conn_status = 0;
+    conn_status = IMU_ERROR;
 }
 
 vec3 IMU::euler() {
-    this->sensor.get_Euler_Angles(&this->euler_storage);
+    this->conn_status = this->sensor.get_Euler_Angles(&this->euler_storage);
 
     vec3 res;
     res.x = this->euler_storage.h;
@@ -120,8 +121,8 @@ vec3 IMU::calibrate_static_error(size_t iter) {
     return this->errors;
 }
 
-calib IMU::get_calibration(uint8_t *_state) {
-    uint8_t reg = this->sensor.read_calib_status(_state);
+calib IMU::get_calibration() {
+    uint8_t reg = this->sensor.read_calib_status(&this->conn_status);
 
     calib res;
 

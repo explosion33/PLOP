@@ -14,8 +14,10 @@
 #define ERROR_ITER_ACCEL    200
 #define ERROR_ITER_BARO     200
 
+#define SENSOR_INIT_RETRY 5
+
 #define ACCEL_WEIGHT        1.0
-#define BARO_WEIGHT         60.0
+#define BARO_WEIGHT         100.0
 #define BARO_VEL_WEIGHT     200.0
 
 #define INITIAL_ALT         48.0 //replace eventually
@@ -45,12 +47,63 @@ IMU imu(i2c);
 Baro baro(&i2c2);
 SerialGPS gps(PA_2, PA_3, 9600);
 
+bool imu_init(double* noise) {
+    CONSOLE("IMU[INFO]: Setting up IMU\n");
+    
+    calib state = imu.get_calibration();
+    if (!imu.conn_status) {
+      CONSOLE("IMU[FAILURE]: Cannot connect to BNO055 please check connection\n");
+      return false;
+
+    }
+    CONSOLE("IMU[SUCCESS]: sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
+    
+
+    vec3 res = imu.calibrate_static_error(ERROR_ITER_ACCEL);
+    if (!imu.conn_status) {
+        CONSOLE("IMU[FAILURE]: failed to calibrate static error\n");
+        return false;
+    }
+    CONSOLE("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
+    
+
+    *noise = imu.get_noise(ERROR_ITER_ACCEL);
+    if (!imu.conn_status) {
+        CONSOLE("IMU[FAILURE]: failed to calculate accelerometer noise\n");
+        return false;
+        
+    }
+
+    CONSOLE("IMU[SUCCESS]: noise: %s\n", to_str(*noise).c);
+    return true;
+        
+}
+
+bool baro_init(double* noise) {
+    CONSOLE("BARO[INFO]: configuring baromter\n");
+    
+    if (!baro.configure(INITIAL_ALT, ERROR_ITER_BARO)) {
+        CONSOLE("BARO[FAILURE]: failed to calibrate barometer\n");
+        return false;
+    }
+    CONSOLE("BARO[SUCCESS]: calbrated | base pressure: %s\n", to_str(baro.base_pres).c);
+    CONSOLE("BARO[INFO]: getting noise\n");
+
+
+    if (!baro.get_noise(ERROR_ITER_BARO, noise)) {
+        CONSOLE("BARO[FAILED]: failed to get barometer noise\n");
+        return false;
+    }
+    CONSOLE("BARO[SUCCESS]: noise: %s\n", to_str(*noise).c);
+    return true;
+}
+
 
 // async Kalman Filter
 void blink() {
     while (true) {
         led = !led;
-        ThisThread::sleep_for(500ms);
+        ThisThread::sleep_for(50ms);
     }
 }
 
@@ -67,105 +120,43 @@ int main() {
         MBED_MINOR_VERSION,
         MBED_PATCH_VERSION
     );
-    // ================== CONFIG IMU ==================
 
-    CONSOLE("IMU[INFO]: Setting up IMU\n");
 
-    uint8_t conn_state = 0;
-    uint8_t retry_counter = 0;
-    imu.conn_status = 0;
-    double accel_noise = 0;
-    vec3 res;
-    
-    calib state = imu.get_calibration(&conn_state);
-    if (conn_state)
-    {
-        CONSOLE("IMU[SUCCESS]: sys: %d, acc: %d, gyr: %d, mag: %d\n", state.sys, state.acc, state.gyr, state.mag);
-        imu.init_status = IMU_CALIB;
-        while (!imu.conn_status && retry_counter < 5)
-        {
-            res = imu.calibrate_static_error(100);
-            retry_counter += 1;
-        }
-        if (conn_state)
-        {
-            CONSOLE("IMU[SUCCESS]: X: %s, Y: %s, Z: %s\n", to_str(res.x).c, to_str(res.y).c, to_str(res.z).c);
-            imu.init_status = IMU_CALIB_S;
-            imu.conn_status = 0;
-            retry_counter = 0;
-        }
-        else
-        {
-            CONSOLE("IMU[FAILURE]: failed to get calib; Conn failed\n");
-            CONSOLE("IMU[FAILURE]: failed to get noise; Conn failed\n");
-        }
-        // if failed, conn will be set to 1, jump over the next accel noise
-        while (!imu.conn_status && retry_counter < 5)
-        {
-            accel_noise = imu.get_noise(ERROR_ITER_ACCEL);
-            retry_counter += 1;
-        }
-        if (imu.conn_status)
-        {
-            imu.init_status = IMU_WORKING;
-            CONSOLE("IMU[SUCCESS]: noise: %s\n", to_str(accel_noise).c);
-        }
-        else
-            CONSOLE("IMU[FAILURE]: failed to get noise\n");
-    }
-    else
-        CONSOLE("IMU[FAILURE]: No connection, plz check;\n");
-
-    // ==================
-
-    // ================== CONFIG BARO ==================
-
-    CONSOLE("BARO[INFO]: configuring baromter\n");
-    retry_counter = 0;
-    double baro_noise = 0;
-    while (retry_counter < 5)
-    {
-        if (baro.configure(INITIAL_ALT, 150))
-        {
-            retry_counter = 0;
-            baro.init_status = BARO_CONFIGD;
-            CONSOLE("BARO[SUCCESS]: configured\n");
-            CONSOLE("BARO[INFO]: getting noise\n");
+    double accel_noise = -1;
+    for (int i = 0; i<SENSOR_INIT_RETRY; i++) {
+        if (imu_init(&accel_noise))
             break;
-        }
-        retry_counter += 1;
-    }
-    while (retry_counter < 5)
-    {
-        if (baro.get_noise(ERROR_ITER_BARO, &baro_noise))
-        {
-            CONSOLE("BARO[SUCCESS]: noise: %s\n", to_str(baro_noise).c);
-            baro.init_status = BARO_WORKING;
-            retry_counter = 0;
+        CONSOLE("IMU[FAILUE]: failed to fully initialize IMU. Retrying %d / %d", i+1, SENSOR_INIT_RETRY);
+    }    
+    CONSOLE("\n");
+
+    double baro_noise = -1;
+    for (int i = 0; i<SENSOR_INIT_RETRY; i++) {
+        if (baro_init(&baro_noise))
             break;
-        }
-        retry_counter += 1;
+        CONSOLE("BARO[FAILUE]: failed to fully initialize Barometer. Retrying %d / %d", i+1, SENSOR_INIT_RETRY);
     }
-    if (retry_counter > 0)
-    {
-        CONSOLE("BARO[FAILED]: connection error \n");
-    }
+
+    CONSOLE("\n");
     
-    // ==================
 
     // Report Init Result and Self Check
-    CONSOLE("-------------\nSelf Check Report:\n");
-    if (imu.init_status == IMU_WORKING)
+    CONSOLE("---------------\nSelf Check Report:\n");
+    if (accel_noise != -1)
         CONSOLE("IMU     [OK]\n");
     else
-        CONSOLE("IMU     [FAIL] %d\n", imu.init_status);
-    if (baro.init_status == BARO_WORKING)
+        CONSOLE("IMU     [FAIL]\n");
+    if (baro_noise != -1)
         CONSOLE("BARO    [OK]\n");
     else
-        CONSOLE("BARO    [FAIL] %d\n", baro.init_status);
+        CONSOLE("BARO    [FAIL]\n");
+    CONSOLE("---------------\n");
     // end of self check
 
-    conn_state = (baro.init_status == BARO_WORKING) && (imu.init_status == IMU_WORKING);
+    // TODO pass status of sensors into KalmanFilter to adjust
+
+    ThisThread::sleep_for(5s);
+
 
     // ================== CONFIG FILTER ==================
     KalmanFilter filter(
@@ -180,7 +171,7 @@ int main() {
 
     // ==================  
     // if anything not init, filter wont working
-    while (conn_state) {
+    while (true) {
 
         auto alt = filter.altitude();
         auto vel = filter.velocity();
@@ -196,14 +187,6 @@ int main() {
         );
 
         //ThisThread::sleep_for(10ms);
-    }
-
-    while (true)
-    {
-        CONSOLE("Critical Error| One or More Sensors Missing...\n");
-        ThisThread::sleep_for(1s);
-        // keep main thread running;
-        // you should never reach here when system running normal
     }
 }
 
@@ -312,18 +295,18 @@ int main() {
     ThisThread::sleep_for(5s);
 
     CONSOLE("CONFIG: %d\n", baro.configure(48, 200));
-    CONSOLE("%s | %s\n\n\n", to_str(baro.base_alt).c, to_str(baro.base_pres).c);
 
     while (true) {
-        float alt = (float)baro.get_alt();
-        CONSOLE("alt: %s | pres: %s | temp: %s | %d, %d | balt: %s, bpres: %s | %d\n", to_str(alt).c, to_str(baro.get_pressure()).c, to_str(baro.get_temperature()).c,
+        double alt = baro.get_alt();
+        float pres = baro.get_pressure();
+        float temp = baro.get_temperature();
+        CONSOLE("alt: %s | pres: %s | temp: %s | %d, %d | balt: %s, bpres: %s | %d.%d\n", to_str(alt).c, to_str(pres).c, to_str(temp).c,
         baro.conn_status, baro.init_status,
-        to_str(baro.base_alt).c, to_str(baro.base_pres).c, (int)alt
+        to_str(baro.base_alt).c, to_str(baro.base_pres).c, (int)alt, (int)((alt - (int)alt)*1000)
         );
         ThisThread::sleep_for(50ms);
     }
 }
-
 */
 
 // I2C Scan

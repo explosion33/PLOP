@@ -7,11 +7,6 @@
 #include <cstdint>
 #include "SerialStream.h"
 
-#define IMU_WORKING 3
-#define IMU_CALIB_S 2
-#define IMU_CALIB 1
-#define IMU_ERROR 0
-
 struct vec3 {
     double x, y, z;
 };
@@ -34,14 +29,13 @@ public:
     vec3 accel();
 
     vec3 calibrate_static_error(size_t iter);
-    calib get_calibration(uint8_t *_state);
+    calib get_calibration();
 
     double get_noise(size_t iter);
 
     bool reset();
 
     uint8_t conn_status; // 1 for working, 0 for connection lost
-    uint8_t init_status; // 0 for failed, 1 for configured, 2 for working
 
 private:
     vec3 rotate(vec3 vec, quat rot);
