@@ -43,7 +43,7 @@ DigitalOut led(LED1);
 
 I2C i2c(PB_7, PB_6); //I2C-1  // SDA, SCL
 I2C i2c2(PB_3, PB_10); // I2C-2  // SDA, SCL
-IMU imu(i2c);
+IMU imu(i2c, PB_5);
 Baro baro(&i2c2);
 SerialGPS gps(PA_2, PA_3, 9600);
 
@@ -150,6 +150,7 @@ int main() {
             has_IMU = true;
             break;
         }
+        imu.reset();
         CONSOLE("IMU[FAILUE]: failed to fully initialize IMU. Attempt %d / %d\n", i+1, SENSOR_INIT_RETRY);
     }    
     CONSOLE("\n");
