@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>3D Model Viewer</title>
+    <style>
+        body { margin: 0; }
+        canvas { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.130.0/build/three.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/three@0.130.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.130.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script>
+        // WebGL variables
+        let scene, camera, renderer, controls, obj;
+
+        // Initialize WebGL and the scene
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Set up camera position
+            camera.position.z = 500;
+
+            // Create a directional light
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 1, 1);
+            scene.add(light);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // color, intensity
+            scene.add(ambientLight);
+
+            // Load 3D model
+            const loader = new THREE.GLTFLoader();
+            loader.load('/static/model.glb', function (gltf) {
+				obj = gltf.scene;
+                scene.add(gltf.scene);
+
+                const box = new THREE.Box3().setFromObject(obj);
+                const center = box.getCenter(new THREE.Vector3());
+
+                // Adjust the position of the model to its center
+                obj.position.sub(center);
+            });
+
+            // Add controls for model rotation
+            //controls = new THREE.OrbitControls(camera, renderer.domElement);
+        }
+
+        // Render loop
+        function animate() {
+            requestAnimationFrame(animate);
+            //controls.update(); // Update controls
+            renderer.render(scene, camera);
+        }
+
+        function center() {
+            let box = new THREE.Box3().setFromObject(obj);
+            let center = box.getCenter(new THREE.Vector3());
+
+            // Adjust the position of the model to its center
+            obj.position.sub(center);
+        }
+
+        function rz(z) {
+            obj.rotation.z = z
+            center()
+        }
+
+        function ry(y) {
+            obj.rotation.y = y
+            center()
+        }
+
+        function rx(x) {
+            obj.rotation.x = x
+            center()
+        }
+
+        async function update_rot() {
+            let response = await fetch("/api/w/-1");
+            let jsonData = await response.json();
+            let w = jsonData[0][1];
+
+            response = await fetch("/api/x/-1");
+            jsonData = await response.json();
+            let x = jsonData[0][1];
+
+            response = await fetch("/api/y/-1");
+            jsonData = await response.json();
+            let y = jsonData[0][1];
+
+            response = await fetch("/api/z/-1");
+            jsonData = await response.json();
+            let z = jsonData[0][1];
+
+            let quaternion = new THREE.Quaternion(x, y, z, w).conjugate();
+
+            const additionalRotation = new THREE.Quaternion();
+            additionalRotation.setFromAxisAngle(new THREE.Vector3(0, 0, -1), Math.PI / 2); // Rotate 90 degrees around the Y axis
+
+            // Combine the additional rotation with the existing rotation of the object
+            const finalRotation = new THREE.Quaternion();
+            finalRotation.multiplyQuaternions(additionalRotation, quaternion);
+
+
+            obj.setRotationFromQuaternion(finalRotation);
+
+
+
+
+
+            //let z_t = obj.rotation.z;
+            //obj.rotation.z = obj.rotation.y;
+            //obj.rotation.x = z_t;
+            //obj.rotation.y += Math.PI/2;
+
+            console.log(obj.rotation.x * 180 / Math.PI, obj.rotation.y * 180 / Math.PI, obj.rotation.z * 180 / Math.PI);
+
+            center();
+        }
+
+
+        // Initialize and start the animation
+        init();
+        animate();
+
+        setInterval(update_rot, 40);
+    </script>
+</body>
+</html>

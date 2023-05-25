@@ -1,0 +1,23 @@
+[package]
+name = "RadioAPI"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ArmlabRadio = "0.6.5"
+serialport = {version = "4.0.2", default-features = false}
+rand = "0.8.5"
+
+[dependencies.rocket]
+rocket = "0.5.0-rc.1"
+features = ["json"]
+
+[dependencies.rocket_dyn_templates]
+version = "0.1.0-rc.2"
+features = ["handlebars"]
+
+[dependencies.serde]
+version = "1.0.136"
+features = ["derive"]
