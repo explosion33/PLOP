@@ -10,7 +10,7 @@ Radio::Radio(Stream * pc) : radio(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK, PIN_
     this->power = 0;
 
     radio.setOnReceiveState(CC1200::State::RX, CC1200::State::RX);
-    radio.setOnTransmitState(CC1200::State::TX);
+    radio.setOnTransmitState(CC1200::State::RX);
 }
 
 Radio::~Radio(){
@@ -18,10 +18,7 @@ Radio::~Radio(){
 
 bool Radio::checkExistance() {
     pc->printf("\n\nChecking for radio...\n");
-    //  Need to return this bool when function called from main.
-    //  This needs to be setup to seperate out the MCUs for each unit - probably needs a Tx push with a confirmation from the Rx unit.
-    bool result = radio.begin();
-    return result;
+    return radio.begin();
 }
 
 bool Radio::init() {
@@ -74,9 +71,6 @@ void Radio::setup_443() {
     radio.setAGCSyncBehavior(CC1200::SyncBehavior::FREEZE_NONE);
     radio.setAGCSettleWait(agcSettleWaitCfg);
 
-    radio.setOnTransmitState(CC1200::State::RX);
-    radio.setOnReceiveState(CC1200::State::RX, CC1200::State::RX);
-
 
     if(ifCfg == CC1200::IFCfg::ZERO)
     {
@@ -96,7 +90,7 @@ void Radio::setup_443() {
 }
 
 float Radio::get_frequency() {
-    return frequency;
+    return this->frequency;
 }
 
 
@@ -105,14 +99,28 @@ float Radio::get_power() {
 }
 
 void Radio::transmit(const char* message, size_t len) {
-	radio.startTX();
-
     if (debug) {
         pc->printf("\n---------------------------------\n");
 
         pc->printf("SENDING: \"%s\"\n", message);
     }
+
     bool success = radio.enqueuePacket(message, len);
+    radio.startTX();
+
+    Timer timeCnt;
+    timeCnt.start();
+
+    // if packet successfully enqueued wait for TXFIFO to empty (packet has transmitted) before continuing
+    if (success) {
+        while (radio.getTXFIFOLen() > 0) {
+            ThisThread::sleep_for(1ms);
+            if (timeCnt.read_ms() > 200)
+                break;
+            pc->printf("fifo-len: %d | state: %d | time: %d\n", radio.getTXFIFOLen(), radio.getState(), timeCnt.read_ms());
+        }
+    }
+    timeCnt.stop();
 
     if (debug) {
         pc->printf("sent: %s\n", (success ? "true" : "false")); 
@@ -124,38 +132,40 @@ void Radio::transmit(const char* message, size_t len) {
 
 }
 
-bool Radio::hasPacket() {
-    radio.startRX();
-    //ThisThread::sleep_for(30ms);
-    while (radio.getState() != CC1200::State::RX) {
-        radio.updateState();
-    }
-    bool res = this->radio.hasReceivedPacket();
-    radio.idle();
-    return res;
-}
-
-size_t Radio::recieve(char* packet) {
-    radio.startRX();
-
+char* Radio::recieve(size_t* len) {
     size_t message_size;
     char receiveBuffer[this->max_msg_size];
 
-	/*if(mode == CC1200::PacketMode::FIXED_LENGTH)
-	{
-		rxRadio.setPacketLength(sizeof(message) - 1);
-	}*/
+    switch (radio.getState()) {
+        case CC1200::State::RX_FIFO_ERROR: {
+            radio.receivePacket(receiveBuffer, this->max_msg_size);
+            radio.idle();
+            
+            *len = 0;
+            return new char[0];
+
+            break;
+        }
+        case CC1200::State::RX: {
+            break;
+        }
+        default: {
+            radio.startRX();
+        }
+    }
+
+    bool hp = radio.hasReceivedPacket();
 
 
-    if (debug) {
+    if (debug && radio.getRXFIFOLen() > 0) {
         pc->printf("\n---------------------------------\n");
 
-        pc->printf("RX radio: state = 0x%" PRIx8 ", RX FIFO len = %zu\n",
-                    static_cast<uint8_t>(radio.getState()), radio.getRXFIFOLen());
+        pc->printf("RX radio: state = 0x%" PRIx8 ", RX FIFO len = %zu | hasPacket: %d\n",
+                    static_cast<uint8_t>(radio.getState()), radio.getRXFIFOLen(), hp);
     }
 
 
-    if (radio.hasReceivedPacket()) {
+    if (hp) {
         size_t bytes = radio.receivePacket(receiveBuffer, this->max_msg_size);
         //radio.idle();
 
@@ -164,23 +174,23 @@ size_t Radio::recieve(char* packet) {
                 pc->printf("recieved %d bytes, max size is %d ... discarding", bytes, this->max_msg_size);
             }
 
-            packet = new char[0];
-            return 0;
+            *len = 0;
+            return new char[0];
         }
 
-        packet = new char[bytes];
+        char* out = new char[bytes];
 
         for (int i = 0; i<bytes; i++) {
-            packet[i] = receiveBuffer[i];
+            out[i] = receiveBuffer[i];
         }
         
-        return bytes;
+        
+        *len = bytes;
+        return out;
     }
 
-    //radio.idle();
-    
-    packet = new char[0];
-    return 0;
+    *len = 0;
+    return new char[0];
 }
 
 

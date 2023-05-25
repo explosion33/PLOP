@@ -15,7 +15,8 @@
 class Radio{
     
     public:
-        Radio(Stream* pc);
+
+        Radio(Stream * pc);
         ~Radio();
         bool checkExistance();
         bool init();
@@ -25,8 +26,7 @@ class Radio{
         float get_power();
         void checkSignalTransmit();
         void transmit(const char* message, size_t len);
-        bool hasPacket();
-        size_t recieve(char* packet);
+        char* recieve(size_t* len);
 
         bool set_frequency(float frequency);
         bool set_power(float power);
@@ -50,6 +50,7 @@ class Radio{
         };
 
     private:
+
         Stream * pc;
         CC1200 radio;
         size_t max_msg_size;
