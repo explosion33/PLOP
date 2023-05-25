@@ -2,6 +2,7 @@
 #include "SerialStream.h"
 #include "IMU.h"
 #include "BARO.h"
+#include <cstdint>
 #include <cstdio>
 #include "KalmanFilter.h"
 #include "SerialGPS.h"
@@ -123,12 +124,62 @@ void blink() {
     }
 }
 
+volatile union {
+    float a;
+    unsigned char bytes[4];
+} alt_u, vel_u, balt_u, time_u, w_u, x_u, y_u, z_u;
+
+
+void transmit() {
+    //Thread t;
+    //t.start(blink);
+
+    Radio radio(&pc);
+    bool exists = radio.init();
+    radio.setup_443();
+
+    radio.set_debug(true);
+
+    CONSOLE("radio: %d\n", exists);
+
+    char msg[32];
+
+    while (1) {
+        for (int i = 0; i<4; i++)
+            msg[i] = time_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 4] = alt_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 8] = balt_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 12] = vel_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 16] = w_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 20] = x_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 24] = y_u.bytes[i];
+        for (int i = 0; i<4; i++)
+            msg[i + 28] = z_u.bytes[i];
+
+
+        radio.transmit(msg, 32);
+
+        ThisThread::sleep_for(70ms);
+    }
+
+}
+
 
 int main() {
     Thread t;
     t.start(blink);
 
-    ThisThread::sleep_for(10s); // allow time to open console before printing major information
+    Thread t2;
+    t2.start(transmit);
+
+    ThisThread::sleep_for(5s); // allow time to open console before printing major information
+
 
     CONSOLE(
         "PLOP Onboard Mbed OS version %d.%d.%d\n",
@@ -162,7 +213,6 @@ int main() {
         }
         CONSOLE("BARO[FAILUE]: failed to fully initialize Barometer. Attempt %d / %d\n", i+1, SENSOR_INIT_RETRY);
     }
-
     CONSOLE("\n");
     
 
@@ -181,7 +231,7 @@ int main() {
 
     // TODO pass status of sensors into KalmanFilter to adjust
 
-    ThisThread::sleep_for(5s);
+    ThisThread::sleep_for(2s);
 
 
     // ================== CONFIG FILTER ==================
@@ -194,6 +244,9 @@ int main() {
     );
 
     filter.start_async(&imu, &baro, &gps);
+
+    Timer et;
+    et.start();
 
     // ==================  
     // if anything not init, filter wont working
@@ -212,31 +265,43 @@ int main() {
 
         );
 
-        //ThisThread::sleep_for(10ms);
+        alt_u.a = alt.val;
+        vel_u.a = vel.val; 
+        balt_u.a = filter.last_baro_alt();
+        time_u.a = ((float)et.read_ms())/1000.0f;
+        
+        auto quat = filter.last_quat();
+
+        w_u.a = quat.w;
+        x_u.a = quat.x;
+        y_u.a = quat.y;
+        z_u.a = quat.z;
+
+        ThisThread::sleep_for(40ms);
     }
 }
 
 
 //RADIO TEST
+
 /*
 int main() {
     Thread t;
     t.start(blink);
 
-    Radio radio(&pc);
-    radio.init();
-    radio.setup_443();
+    Thread t2;
+    t2.start(transmit);
 
-    radio.set_debug(true);
-
-    size_t i = 0;
     while (true) {
-        radio.transmit("test msg", 9);
-        pc.printf("sent message\n");
-        ThisThread::sleep_for(1s);
+        val += 0.1;
+        ThisThread::sleep_for(100ms);
     }
 }
 */
+
+
+
+
 
 
 // IMU accel test

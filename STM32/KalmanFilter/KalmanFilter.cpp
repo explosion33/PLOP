@@ -38,6 +38,8 @@ KalmanFilter::KalmanFilter(double alt, double accel_weight, double baro_weight, 
         alt,
         0,
 
+        quat {0, 0, 0, 0},
+
         false,
         alt,
         0.0,
@@ -86,6 +88,8 @@ void do_accel_async(filterData* data) {
 
         data->last_acc = acc;
         data->last_dt = dt;
+
+        data->last_quat = data->imu->quaternion();
 
         data->syncTimer.reset();
 
@@ -255,4 +259,8 @@ gpsData KalmanFilter::last_gps() {
     };
 
     return res;
+}
+
+quat KalmanFilter::last_quat() {
+    return this->async_data.last_quat;
 }

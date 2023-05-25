@@ -45,6 +45,8 @@ struct filterData {
     double last_baro;
     double last_dt;
 
+    quat last_quat;
+
     // high dv baro + IMU desync fix
     bool has_new_baro;
     double curr_baro;
@@ -73,4 +75,6 @@ public:
     data velocity();
     double last_dt();
     gpsData last_gps();
+
+    quat last_quat();
 };
